@@ -1,14 +1,22 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from telebot import types
+from datetime import date
 
-with open("./token.txt", "r", ) as file:
-    token = file.read()
+import configparser
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+token = config['token']['value']
 
 bot = telebot.TeleBot(token)
 
 cards = []
-card = {}
+card = {"text": str, 
+        "hint": str, 
+        "mem_level": int,
+        "last_study": date}
+
 
 def text_unique(key, text):
     '''
@@ -69,11 +77,11 @@ def add_new_card(message):
 # Спрашиваем про текст карточки
 def get_remember_text(message):
     global card 
-    if text_unique('remember_text', message.text) == False:
+    if text_unique('text', message.text) == False:
         bot.send_message(message.chat.id, "Карточка с таким текстом уже есть, попробуйте другую")
         bot.register_next_step_handler(message, get_remember_text)
         return 
-    card['remember_text'] = message.text
+    card['text'] = message.text
     bot.send_message(message.chat.id, "Введите подсказку, по которой будете вспоминать")
     bot.register_next_step_handler(message, get_hint)
 
