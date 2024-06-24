@@ -42,8 +42,37 @@ def user_exist(connection, user_id):
         except Error as e:
             print(f"Ошибка запроса SQL: {e}")
             return True
+        
+def data_unique(connection, column, value):
 
-def add_user(connection, user_id):
+    query = f"SELECT * FROM Memory_bot.cards WHERE {column} = '{value}'"
+    print(query)
+    with connection.cursor() as cursor:
+        try: 
+            print("!")
+            cursor.execute(query)
+            result = cursor.fetchone()
+            print(result)
+            return result is None
+            
+        except Error as e:
+            print(f"Ошибка запроса SQL: {e}")
+            return False
+
+def add_card(connection, text, hint, user_id): 
+
+    query = f"INSERT Memory_bot.cards(text, hint, user_id) VALUES('{text}', '{hint}', {user_id})"
+
+    with connection.cursor() as cursor:
+        try: 
+            cursor.execute(query)
+            connection.commit()
+            return True
+        except Error as e:
+            print(f"Ошибка запроса SQL: {e}")
+            return False
+
+def add_user(connection, user_id): # можно совместить в функцию insert 
 
     query = f"INSERT Memory_bot.users(user_id) VALUES({user_id})"
 

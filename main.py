@@ -32,13 +32,22 @@ def text_unique(key, text):
 
 text1 = "ПОДСКАЗКА"
 text2 = "ИНФОРМАЦИЯ ДЛЯ ЗАПОМНИНАНИЯ"
+connection = object
 
 current_text = text1
+
+# Команда /home
+@bot.message_handler(commands=['home'])
+def send_home(message):
+    bot.send_message(message.chat.id, "Вы на главной странице.")
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def udentify_user(message):
+    global connection 
+
     user_id = message.chat.id
+    bot.send_message(message.chat.id, "Доброго времени суток. Если хотите начать учиться, введите команду /learn.\nХотите добавить новую карточку, введите команду /newcard")
 
     connection = db.connect_database()
     if db.user_exist(connection, user_id) is False: # если пользователя не существует, то создаем новую запись в базе данных 
@@ -90,24 +99,30 @@ def add_new_card(message):
 
 # Спрашиваем про текст карточки
 def get_remember_text(message):
-    global card 
-    if text_unique('text', message.text) == False:
-        bot.send_message(message.chat.id, "Карточка с таким текстом уже есть, попробуйте другую")
+    global connection 
+    text = message.text
+    if db.data_unique(connection, "text", text) is False:
+        bot.send_message(message.chat.id, "Карточка с таким текстом уже есть, попробуйте другой")
         bot.register_next_step_handler(message, get_remember_text)
-        return 
-    card['text'] = message.text
+        return
     bot.send_message(message.chat.id, "Введите подсказку, по которой будете вспоминать")
-    bot.register_next_step_handler(message, get_hint)
+    bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
 
 # Спрашиваем про подсказку для карточки 
-def get_hint(message):
-    global cards, card
-    if text_unique('hint', message.text) == False:
+def get_hint(message, text):
+    global connection
+
+    if db.data_unique(connection, "hint", message.text) is False:
         bot.send_message(message.chat.id, "Карточка с такой подсказкой уже есть, попробуйте другую")
-        bot.register_next_step_handler(message, get_hint)
+        bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
+        return
+
+    if db.add_card(connection=connection, text=text, hint=message.text, user_id=message.chat.id) is False: 
+        bot.send_message(message.chat.id, "Произошла ошибка. Карточка не добавлена(")
+        print("Произошла ошибка при добавлении карточки")
         return 
-    card['hint'] =  message.text
-    cards.append(card)
+    
+    print("Карточка сделана и занесена в базу данных")
     bot.send_message(message.chat.id, "Карточка для запоминания успешно добавлена!")
 
 bot.polling(none_stop=True, interval=0)
