@@ -3,6 +3,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from telebot import types
 from datetime import date
 
+import db 
+
 import configparser
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -16,7 +18,6 @@ card = {"text": str,
         "hint": str, 
         "mem_level": int,
         "last_study": date}
-
 
 def text_unique(key, text):
     '''
@@ -36,7 +37,20 @@ current_text = text1
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
-def send_welcome(message):
+def udentify_user(message):
+    user_id = message.chat.id
+
+    connection = db.connect_database()
+    if db.user_exist(connection, user_id) is False: # если пользователя не существует, то создаем новую запись в базе данных 
+        print("Новый пользователь")
+        db.add_user(connection, user_id)
+    else:
+        print("Знакомый пользователь")
+    
+
+# Обработчик команды /learn
+@bot.message_handler(commands=['learn'])
+def learn_cards(message):
     # Отправляем сообщение с InlineKeyboardMarkup
     markup = types.InlineKeyboardMarkup()
     button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")

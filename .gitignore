@@ -1,3 +1,4 @@
 env
 test.py
 config.ini
+__pycache__
