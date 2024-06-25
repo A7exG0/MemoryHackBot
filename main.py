@@ -19,6 +19,10 @@ connection = object
 
 current_text = text1
 
+def show_card(message, card):
+    bot.send_message(message.chat.id, f"id: {card[0]}\n---------------------------\n{card[2]}\n---------------------------\n{card[1]}")
+
+
 # Команда /home
 @bot.message_handler(commands=['home'])
 def send_home(message):
@@ -30,14 +34,13 @@ def show_all(message):
     global connection
     print('Получаем карточки из базы данных')
     bot.send_message(message.chat.id, "Выводим все карточки")
-    cards = db.select_cards(connection)
+    cards = db.select_all_cards(connection)
     if cards is False:
         bot.send_message(message.chat.id, "Произошла ошибка")
         return
     print("Карточки успешно получены")
     for card in cards: 
-        bot.send_message(message.chat.id, f"id: {card[0]}\n---------------------------\n{card[2]}\n---------------------------\n{card[1]}")
-        
+        show_card(message, card)        
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
@@ -45,17 +48,62 @@ def udentify_user(message):
     global connection 
 
     user_id = message.chat.id
-    bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки введите команду /showall")
+    bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /findcard")
 
     connection = db.connect_database()
-    if db.value_unique(connection, "users", "user_id", user_id) is True: 
+    result = db.value_unique(connection, "users", "user_id", user_id)
+    if result is True: 
         print("Новый пользователь")
         if db.sql_insert(connection, "users", user_id=user_id) is False:
             bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
-            print("Ошибка в добавлении пользователя")
-    else:
+    elif result is False:
         print("Знакомый пользователь")
+    else: 
+        bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
     
+# Обработчик команды /findcard
+@bot.message_handler(commands=['findcard'])
+def choose_parameter(message):
+    # Отправляем сообщение с ReplyKeyboardMarkup
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    button1 = types.KeyboardButton('id')
+    button2 = types.KeyboardButton('Подсказка')
+    button3 = types.KeyboardButton('Текст')
+    keyboard.add(button1, button2, button3)
+
+    bot.send_message(message.chat.id, "Выберите параметр, по которому будем искать карточку", reply_markup=keyboard)
+    bot.register_next_step_handler(message, lambda msg: check_find_param(msg, keyboard))
+
+def check_find_param(message, keyboard):
+    param = message.text
+    column = ""
+    if param == "id":
+        print("Выбран поиск по id")
+        column = "card_id"
+    elif param == "Подсказка":
+        print("Выбран поиск по подсказке")
+        column = "hint"
+    elif param == "Текст":
+        print("Выбран поиск по тексту")
+        column = "text"
+    else:
+        bot.send_message(message.chat.id, "Есть только три варианта. Попробуйте еще", reply_markup=keyboard)
+        bot.register_next_step_handler(message, lambda msg: check_find_param(msg, keyboard))
+
+    hide_keyboard = types.ReplyKeyboardRemove()
+    bot.send_message(message.chat.id, "Введите значение для поиска", reply_markup=hide_keyboard)
+    bot.register_next_step_handler(message, lambda msg: find_card(msg, column))
+
+def find_card(message, column):
+    print("Начинаем поиск в базе данных")
+    card = db.select_by_value(connection, column, message.text)
+    if not card:
+        bot.send_message(message.chat.id, "Такой карточки нет")
+        print(f"Карточка со значение \"{message.text}\" в колонке {column} не найдена")
+    else:
+        show_card(message, card)
+        print("Карточка найдена")
+
 
 # Обработчик команды /learn
 @bot.message_handler(commands=['learn'])
@@ -101,7 +149,13 @@ def add_new_card(message):
 def get_remember_text(message):
     global connection 
     text = message.text
-    if db.value_unique(connection, "cards", "text", text) is False:
+
+    is_unique = db.value_unique(connection, "cards", "text", text)
+    if is_unique == -1:         
+        bot.send_message(message.chat.id, "Произошла ошибка(")
+        return
+    
+    if not is_unique:
         bot.send_message(message.chat.id, "Карточка с таким текстом уже есть, попробуйте другой")
         bot.register_next_step_handler(message, get_remember_text)
         return
@@ -112,7 +166,7 @@ def get_remember_text(message):
 def get_hint(message, text):
     global connection
 
-    if db.value_unique(connection, "cards", "hint", message.text) is False:
+    if not db.value_unique(connection, "cards", "hint", message.text):
         bot.send_message(message.chat.id, "Карточка с такой подсказкой уже есть, попробуйте другую")
         bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
         return

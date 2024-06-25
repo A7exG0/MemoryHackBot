@@ -29,30 +29,45 @@ def connect_database():
         print(f"Ошибка подключения к MySQL: {e}")
         return None  # Возвращаем None в случае ошибки
 
+
+def exec_select_query(connection, query):
+    with connection.cursor() as cursor:
+        try: 
+            cursor.execute(query)
+            result = cursor.fetchall()
+            return result
+
+        except Error as e:
+            print(f"Ошибка запроса SQL: {e}")
+            return False
+
+def correct_value(value):
+    '''
+    Функция нужна для того, чтобы подготовить значения для sql запроса
+    '''
+    if type(value) == str:
+        value = "'" + value + "'"
+    else: 
+        value = str(value)
+    return value
+
 def value_unique(connection, table, column, value):
     '''
     Проверяет уникальность value в column.
     Возвращает True, если такого значения нет.
     Возвращает -1 в случае ошибки.
     '''
-    if type(value) == str:
-        value = "'" + value + "'"
-    else: 
-        value = str(value)
+    sql_value = correct_value(value)
 
-    query = f"SELECT * FROM Memory_bot.{table} WHERE {column} = {value}"
+    query = f"SELECT * FROM Memory_bot.{table} WHERE {column} = {sql_value}"
 
-    with connection.cursor() as cursor:
-        try: 
-            cursor.execute(query)
-            result = cursor.fetchone()
-            return result is None
-            
-        except Error as e:
-            print(f"Ошибка запроса SQL: {e}")
-            return -1
+    result = exec_select_query(connection, query)
+    if result == -1:
+        return result 
+    else:
+        return not result
 
-
+ 
 def sql_insert(connection, table, **kwargs):
     '''
     Функция принимает connection базы данных и таблицу в которую будут вставляться данные. 
@@ -64,10 +79,8 @@ def sql_insert(connection, table, **kwargs):
     columns = values = ""
     for key, value in kwargs.items():
         columns += key + ","
-        if type(value) == str:
-            values += "'" + value + "',"
-        else: # не знаю, сработает ли это для datetime
-            values += str(value) + ","
+        sql_value = correct_value(value)
+        values+= sql_value + ","
             
     # Удаляем последнюю запятую 
     values = values[:len(values)-1]
@@ -85,18 +98,22 @@ def sql_insert(connection, table, **kwargs):
             print(f"Ошибка запроса SQL: {e}")
             return False
 
-def select_cards(connection): 
-    
+
+        
+def select_all_cards(connection): 
     query = "SELECT card_id, text, hint FROM cards"
+    return exec_select_query(connection, query)
 
-    with connection.cursor() as cursor:
-        try: 
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            return rows
+        
+def select_by_value(connection, column, value): 
+    if column != "card_id": # подготавливаем значение, только если поиск не в card_id колонке, так как там значения int
+        value = correct_value(value)
+    
+    query = f"SELECT card_id, text, hint FROM cards WHERE {column} = {value}"
+    result = exec_select_query(connection, query)
+    if result:
+        return result[0]
+    else:
+        return None
 
-        except Error as e:
-            print(f"Ошибка запроса SQL: {e}")
-            return False
-    # Получение всех строк результата запроса
     
