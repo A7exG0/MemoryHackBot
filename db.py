@@ -85,4 +85,18 @@ def sql_insert(connection, table, **kwargs):
             print(f"Ошибка запроса SQL: {e}")
             return False
 
+def select_cards(connection): 
+    
+    query = "SELECT card_id, text, hint FROM cards"
 
+    with connection.cursor() as cursor:
+        try: 
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            return rows
+
+        except Error as e:
+            print(f"Ошибка запроса SQL: {e}")
+            return False
+    # Получение всех строк результата запроса
+    

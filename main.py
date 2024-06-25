@@ -13,23 +13,6 @@ token = config['token']['value']
 
 bot = telebot.TeleBot(token)
 
-cards = []
-card = {"text": str, 
-        "hint": str, 
-        "mem_level": int,
-        "last_study": date}
-
-def text_unique(key, text):
-    '''
-    Проверяет, была ли добавлена карточка с таким текстом.
-    '''
-    global cards
-    for card in cards:
-        if card[key] == text: 
-            return False
-        
-    return True
-
 text1 = "ПОДСКАЗКА"
 text2 = "ИНФОРМАЦИЯ ДЛЯ ЗАПОМНИНАНИЯ"
 connection = object
@@ -41,13 +24,28 @@ current_text = text1
 def send_home(message):
     bot.send_message(message.chat.id, "Вы на главной странице.")
 
+# Команда /showall для отображения всех карточек
+@bot.message_handler(commands=['showall'])
+def show_all(message):
+    global connection
+    print('Получаем карточки из базы данных')
+    bot.send_message(message.chat.id, "Выводим все карточки")
+    cards = db.select_cards(connection)
+    if cards is False:
+        bot.send_message(message.chat.id, "Произошла ошибка")
+        return
+    print("Карточки успешно получены")
+    for card in cards: 
+        bot.send_message(message.chat.id, f"id: {card[0]}\n---------------------------\n{card[2]}\n---------------------------\n{card[1]}")
+        
+
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def udentify_user(message):
     global connection 
 
     user_id = message.chat.id
-    bot.send_message(message.chat.id, "Доброго времени суток. Если хотите начать учиться, введите команду /learn.\nХотите добавить новую карточку, введите команду /newcard")
+    bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки введите команду /showall")
 
     connection = db.connect_database()
     if db.value_unique(connection, "users", "user_id", user_id) is True: 
