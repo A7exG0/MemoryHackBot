@@ -39,7 +39,18 @@ def exec_select_query(connection, query):
 
         except Error as e:
             print(f"Ошибка запроса SQL: {e}")
-            return False
+            return -1
+        
+def exec_commit_query(connection, query):
+    with connection.cursor() as cursor:
+        try: 
+            cursor.execute(query)
+            connection.commit()
+            return True
+
+        except Error as e:
+            print(f"Ошибка запроса SQL: {e}")
+            return -1
 
 def correct_value(value):
     '''
@@ -88,16 +99,7 @@ def sql_insert(connection, table, **kwargs):
 
     query = f"INSERT Memory_bot.{table}({columns}) VALUES({values})"
 
-    with connection.cursor() as cursor:
-        try: 
-            cursor.execute(query)
-            connection.commit()
-            return True
-
-        except Error as e:
-            print(f"Ошибка запроса SQL: {e}")
-            return False
-
+    return exec_commit_query(connection, query)
 
         
 def select_all_cards(connection): 
@@ -115,5 +117,11 @@ def select_by_value(connection, column, value):
         return result[0]
     else:
         return None
+    
+def delete_card(connection, id):
+    query = f"DELETE FROM cards WHERE card_id = {id}"
+    return exec_commit_query(connection, query) 
+
+
 
     

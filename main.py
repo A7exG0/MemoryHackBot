@@ -28,6 +28,29 @@ def show_card(message, card):
 def send_home(message):
     bot.send_message(message.chat.id, "Вы на главной странице.")
 
+# Команда /delete
+@bot.message_handler(commands=['delete'])
+def ask_id(message):    
+    bot.send_message(message.chat.id, "Введите id карточки")
+    bot.register_next_step_handler(message, delete_card)
+
+def delete_card(message):
+    print("Начинаем удалять карточку")
+    id = message.text
+    is_unique = db.value_unique(connection, "cards", "card_id", id)
+    if is_unique: 
+        print(f"Карточки с {id} нет")
+        bot.send_message(message.chat.id, "Карточки с таким id нет")
+        return
+    elif not is_unique:
+        if db.delete_card(connection, id): 
+            print(f"Карточка удалена")
+            bot.send_message(message.chat.id, "Карточка удалена")
+        else:
+            print(f"Произошла ошибка при удалении")
+            bot.send_message(message.chat.id, "Произошла ошибка при удалении(")
+            
+
 # Команда /showall для отображения всех карточек
 @bot.message_handler(commands=['showall'])
 def show_all(message):
@@ -48,21 +71,21 @@ def udentify_user(message):
     global connection 
 
     user_id = message.chat.id
-    bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /findcard")
+    bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /find")
 
     connection = db.connect_database()
-    result = db.value_unique(connection, "users", "user_id", user_id)
-    if result is True: 
+    is_unique = db.value_unique(connection, "users", "user_id", user_id)
+    if is_unique is True: 
         print("Новый пользователь")
         if db.sql_insert(connection, "users", user_id=user_id) is False:
             bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
-    elif result is False:
+    elif is_unique is False:
         print("Знакомый пользователь")
     else: 
         bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
     
-# Обработчик команды /findcard
-@bot.message_handler(commands=['findcard'])
+# Обработчик команды /find
+@bot.message_handler(commands=['find'])
 def choose_parameter(message):
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
