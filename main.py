@@ -50,9 +50,11 @@ def udentify_user(message):
     bot.send_message(message.chat.id, "Доброго времени суток. Если хотите начать учиться, введите команду /learn.\nХотите добавить новую карточку, введите команду /newcard")
 
     connection = db.connect_database()
-    if db.user_exist(connection, user_id) is False: # если пользователя не существует, то создаем новую запись в базе данных 
+    if db.value_unique(connection, "users", "user_id", user_id) is True: 
         print("Новый пользователь")
-        db.add_user(connection, user_id)
+        if db.sql_insert(connection, "users", user_id=user_id) is False:
+            bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
+            print("Ошибка в добавлении пользователя")
     else:
         print("Знакомый пользователь")
     
@@ -101,7 +103,7 @@ def add_new_card(message):
 def get_remember_text(message):
     global connection 
     text = message.text
-    if db.data_unique(connection, "text", text) is False:
+    if db.value_unique(connection, "cards", "text", text) is False:
         bot.send_message(message.chat.id, "Карточка с таким текстом уже есть, попробуйте другой")
         bot.register_next_step_handler(message, get_remember_text)
         return
@@ -112,12 +114,12 @@ def get_remember_text(message):
 def get_hint(message, text):
     global connection
 
-    if db.data_unique(connection, "hint", message.text) is False:
+    if db.value_unique(connection, "cards", "hint", message.text) is False:
         bot.send_message(message.chat.id, "Карточка с такой подсказкой уже есть, попробуйте другую")
         bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
         return
 
-    if db.add_card(connection=connection, text=text, hint=message.text, user_id=message.chat.id) is False: 
+    if db.sql_insert(connection=connection, table="cards", text=text, hint=message.text, user_id=message.chat.id) is False: 
         bot.send_message(message.chat.id, "Произошла ошибка. Карточка не добавлена(")
         print("Произошла ошибка при добавлении карточки")
         return 
