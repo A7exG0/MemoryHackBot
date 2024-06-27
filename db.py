@@ -118,10 +118,18 @@ def select_by_value(connection, column, value):
     else:
         return None
     
+def select_where_condition(connection, condition): 
+    
+    query = f"SELECT card_id, text, hint FROM cards WHERE {condition}"
+    result = exec_select_query(connection, query)
+    if result:
+        return result
+    else:
+        return None
+    
 def delete_card(connection, id):
     query = f"DELETE FROM cards WHERE card_id = {id}"
     return exec_commit_query(connection, query) 
-
 
 def change_card(connection, id, column, value):
     query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id}"

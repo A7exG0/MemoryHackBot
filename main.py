@@ -13,15 +13,11 @@ token = config['token']['value']
 
 bot = telebot.TeleBot(token)
 
-text1 = "ПОДСКАЗКА"
-text2 = "ИНФОРМАЦИЯ ДЛЯ ЗАПОМНИНАНИЯ"
 connection = object
 
-current_text = text1
 
 def show_card(message, card):
     bot.send_message(message.chat.id, f"id: {card[0]}\n---------------------------\n{card[2]}\n---------------------------\n{card[1]}")
-
 
 # Команда /home
 @bot.message_handler(commands=['home'])
@@ -128,10 +124,10 @@ def show_all(message):
 def udentify_user(message):
     global connection 
 
+    connection = db.connect_database()
     user_id = message.chat.id
     bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /find")
 
-    connection = db.connect_database()
     is_unique = db.value_unique(connection, "users", "user_id", user_id)
     if is_unique is True: 
         print("Новый пользователь")
@@ -170,6 +166,7 @@ def check_find_param(message, keyboard):
     else:
         bot.send_message(message.chat.id, "Есть только три варианта. Попробуйте еще", reply_markup=keyboard)
         bot.register_next_step_handler(message, lambda msg: check_find_param(msg, keyboard))
+        return
 
     hide_keyboard = types.ReplyKeyboardRemove()
     bot.send_message(message.chat.id, "Введите значение для поиска", reply_markup=hide_keyboard)
@@ -186,39 +183,133 @@ def find_card(message, column):
         print("Карточка найдена")
 
 
+class Cards(): 
+    def __init__(self, cards):
+        self.cards = []
+        for card in cards:
+            self.add_card(card)
+        self.current = 0 # Отображает номер текущей карты 
+        self.number_learned = 0 # Фиксирует количество выученных карточке
+        self.index_last_card = 0 # Будет указывать на последнюю полученную карту 
+
+    def add_card(self, card):
+        card = {
+            "card_id": card[0],
+            "text": card[1],
+            "hint": card[2],
+            "repetitions_number": "0"
+        }
+        self.cards.append(card)
+
+    def __next__(self):
+        # Если дашли до конца колоды, то обнуляем счетчики
+        if self.current == len(self.cards):
+            self.current = 0
+            self.number_learned = 0
+
+        # Цикл пропуска выученных карточек
+        while(self.number_learned < len(self.cards)):
+            card =  self.cards[self.current]
+            if card["repetitions_number"] == 3: 
+                self.number_learned += 1
+                if self.number_learned == len(self.cards):
+                    break
+            else:
+                self.index_last_card = self.current
+                self.current += 1
+                return card
+            
+            self.current += 1
+            # Обнуляем значения, если дошли до конца карточек
+            if self.current == len(self.cards):
+                self.current = 0
+                self.number_learned = 0
+        
+        # Если все карточки выучены, то возвратим это
+        return "Learned everything"
+    
+    def change_last_card(self):
+        current_repetitions_number = self.cards[self.index_last_card]["repetitions_number"]
+        self.cards[self.index_last_card]["repetitions_number"] = int(current_repetitions_number) + 1
+        
+current_text = hint_text = remember_text = ""
+cards : Cards
+
 # Обработчик команды /learn
 @bot.message_handler(commands=['learn'])
-def learn_cards(message):
-    # Отправляем сообщение с InlineKeyboardMarkup
-    markup = types.InlineKeyboardMarkup()
-    button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
-    markup.add(button)
-    bot.send_message(message.chat.id, text1, reply_markup=markup)
-    
+def get_new_cards(message):
+    global connection, cards
+
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     button1 = types.KeyboardButton('Не помню')
     button2 = types.KeyboardButton('Помню')
     keyboard.add(button1, button2)
 
-    # Используем send_message для отправки клавиатуры
-    bot.send_message(message.chat.id, "Помните ли вы данную карочку?", reply_markup=keyboard)
+    bot.send_message(message.chat.id, text = "Сейчас вам будет показана карточка. Ваша задача вспомнить текст карточки по подсказке и ответить получилось ли у вас это или нет.",  reply_markup=keyboard)   
+
+    # Выбираем все новые карточки 
+    cards_to_study = db.select_where_condition(connection, "memlevel = 0")
+    cards = Cards(cards_to_study)
+    
+    show_next_card(message, keyboard)
+
+
+def show_next_card(message, keyboard):
+    global hint_text, remember_text, current_text, cards
+    card = next(cards)
+    if card == "Learned everything":
+        hide_keyboard = types.ReplyKeyboardRemove()
+        bot.send_message(message.chat.id, "Отлично! Вы запомнили все карточки, следующее повторение будет завтра в 20:00. Не опаздывайте!", reply_markup=hide_keyboard)
+        return
+    
+    hint_text = card["hint"]
+    current_text = remember_text = card["text"]
+
+     # Отправляем сообщение с InlineKeyboardMarkup
+    markup = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
+    markup.add(button)
+    bot.send_message(message.chat.id, text = hint_text, reply_markup=markup)
+
+    bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard))
+
+def check_answer(message, keyboard):
+    global cards
+
+    answer = message.text
+    if answer == "Помню":
+        cards.change_last_card() # увеличиеваем repetitions_number
+    elif answer == "Не помню":
+        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся")
+    else:
+        bot.send_message(message.chat.id, "Есть только два варианта. Попробуйте еще раз", reply_markup=keyboard)
+        bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard))
+        return
+    
+    # Переходим к следующей карточке
+    show_next_card(message, keyboard)
+
 
 # Обработчик нажатия на кнопку
 @bot.callback_query_handler(func=lambda call: call.data == "change_text")
 def callback_change_text(call):
-    global current_text
-    if current_text == text1: 
-        current_text = text2
+    global current_text, hint_text, remember_text, cards
+    
+    # Проверка на изменение текста перед обновлением
+    if call.message.text != current_text:
+        markup = types.InlineKeyboardMarkup()
+        button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
+        markup.add(button)
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=current_text, reply_markup=markup)
+    
+    if current_text == hint_text: 
+        current_text = remember_text
     else: 
-        current_text = text1
+        current_text = hint_text
 
-    markup = types.InlineKeyboardMarkup()
-    button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
-    markup.add(button)
-
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text = current_text, reply_markup=markup)
     bot.answer_callback_query(call.id)  # Отвечаем на callback без отправки сообщения
+    print("Карточка перевернута")
 
 # Добавление новой карточки
 @bot.message_handler(commands=['newcard'])
