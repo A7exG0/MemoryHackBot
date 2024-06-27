@@ -231,6 +231,9 @@ class Cards():
     def change_last_card(self):
         current_repetitions_number = self.cards[self.index_last_card]["repetitions_number"]
         self.cards[self.index_last_card]["repetitions_number"] = int(current_repetitions_number) + 1
+    
+    def get_last_card(self):
+        return self.cards[self.index_last_card]
         
 current_text = hint_text = remember_text = ""
 cards : Cards
@@ -270,23 +273,26 @@ def show_next_card(message, keyboard):
     markup = types.InlineKeyboardMarkup()
     button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
     markup.add(button)
-    bot.send_message(message.chat.id, text = hint_text, reply_markup=markup)
+    message_for_ban = bot.send_message(message.chat.id, text = hint_text, reply_markup=markup)
 
-    bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard))
+    bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard, message_for_ban))
 
-def check_answer(message, keyboard):
-    global cards
+def check_answer(message, keyboard, message_for_ban):
+    global cards, current_text
 
     answer = message.text
     if answer == "Помню":
         cards.change_last_card() # увеличиеваем repetitions_number
     elif answer == "Не помню":
-        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся")
+        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:")
     else:
         bot.send_message(message.chat.id, "Есть только два варианта. Попробуйте еще раз", reply_markup=keyboard)
-        bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard))
+        bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard, message_for_ban))
         return
     
+    card = cards.get_last_card()
+    text = f"id: {card['card_id']}\n---------------------------\n{card['hint']}\n---------------------------\n{card['text']}\n---------------------------\nСколько раз осталось повторить: {3 - int(card["repetitions_number"])}"
+    bot.edit_message_text(chat_id=message_for_ban.chat.id, message_id=message_for_ban.message_id, text=text)
     # Переходим к следующей карточке
     show_next_card(message, keyboard)
 
