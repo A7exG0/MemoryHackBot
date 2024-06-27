@@ -28,9 +28,64 @@ def show_card(message, card):
 def send_home(message):
     bot.send_message(message.chat.id, "Вы на главной странице.")
 
+# Команда /change
+@bot.message_handler(commands=['change'])
+def ask_id_for_change(message):    
+    bot.send_message(message.chat.id, "Введите id карточки")
+    bot.register_next_step_handler(message, get_card_to_change)
+
+def get_card_to_change(message):
+    print("Получаем карточку")
+    id = message.text
+    card = db.select_by_value(connection, "card_id", id)
+    if not card: 
+        print(f"Карточки с {id} нет")
+        bot.send_message(message.chat.id, "Карточки с таким id нет")
+        return
+    else:
+        show_card(message, card)
+        choose_column_to_change(message, id)
+
+def choose_column_to_change(message, id):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    button1 = types.KeyboardButton('Подсказка')
+    button2 = types.KeyboardButton('Текст')
+    keyboard.add(button1, button2)
+
+    bot.send_message(message.chat.id, "Выберите параметр, по которому будем менять карточку", reply_markup=keyboard)
+    bot.register_next_step_handler(message, lambda msg: check_column(msg, keyboard, id))
+
+def check_column(message, keyboard, id):
+    column = message.text
+    if column == "Подсказка":
+        print("Выбрано изменение по подсказке")
+        column = "hint"
+    elif column == "Текст":
+        print("Выбрано изменение по тексту")
+        column = "text"
+    else:
+        bot.send_message(message.chat.id, "Есть два варианта. Попробуйте еще", reply_markup=keyboard)
+        bot.register_next_step_handler(message, lambda msg: check_column(msg, keyboard, id))
+        return 
+
+    hide_keyboard = types.ReplyKeyboardRemove()
+    bot.send_message(message.chat.id, "Введите новое значение", reply_markup=hide_keyboard)
+    bot.register_next_step_handler(message, lambda msg: change_card(msg, column, id))
+
+def change_card(message, column, id):
+    if db.change_card(connection, id, column, message.text):
+        print("Изменение прошло успешно")
+        bot.send_message(message.chat.id, "Карточка изменена:")
+        card = db.select_by_value(connection, "card_id", id)
+        show_card(message, card)
+    else:
+        print("Ошибка в функции change_card")
+        bot.send_message(message.chat.id, "Произошла ошибка при изменении карточки(")
+
+        
 # Команда /delete
 @bot.message_handler(commands=['delete'])
-def ask_id(message):    
+def ask_id_for_delete(message):    
     bot.send_message(message.chat.id, "Введите id карточки")
     bot.register_next_step_handler(message, delete_card)
 
@@ -49,6 +104,9 @@ def delete_card(message):
         else:
             print(f"Произошла ошибка при удалении")
             bot.send_message(message.chat.id, "Произошла ошибка при удалении(")
+    else:
+        print(f"Произошла ошибка при в функции value_unique")
+        bot.send_message(message.chat.id, "Произошла ошибка при удалении(")
             
 
 # Команда /showall для отображения всех карточек

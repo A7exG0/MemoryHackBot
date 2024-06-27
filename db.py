@@ -123,5 +123,7 @@ def delete_card(connection, id):
     return exec_commit_query(connection, query) 
 
 
-
+def change_card(connection, id, column, value):
+    query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id}"
+    return exec_commit_query(connection, query)
     
