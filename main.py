@@ -1,9 +1,9 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from telebot import types
-from datetime import date
-
 import db 
+
+STUDY_TIME = "20:00"
 
 import configparser
 config = configparser.ConfigParser()
@@ -14,6 +14,14 @@ token = config['token']['value']
 bot = telebot.TeleBot(token)
 
 connection = object
+
+from datetime import datetime, timedelta
+
+def get_tomorrow_date():
+    today = datetime.now()
+    tomorrow = today + timedelta(days=1)
+    # Возвращаем завтрашнюю дату в формате YYYY-MM-DD hh:mm
+    return tomorrow.strftime("%Y-%m-%d") + " " + STUDY_TIME
 
 
 def show_card(message, card):
@@ -185,7 +193,7 @@ def find_card(message, column):
 
 class Cards(): 
     def __init__(self, cards):
-        self.cards = []
+        self.cards_array = []
         for card in cards:
             self.add_card(card)
         self.current = 0 # Отображает номер текущей карты 
@@ -199,20 +207,20 @@ class Cards():
             "hint": card[2],
             "repetitions_number": "0"
         }
-        self.cards.append(card)
+        self.cards_array.append(card)
 
     def __next__(self):
         # Если дашли до конца колоды, то обнуляем счетчики
-        if self.current == len(self.cards):
+        if self.current == len(self.cards_array):
             self.current = 0
             self.number_learned = 0
 
         # Цикл пропуска выученных карточек
-        while(self.number_learned < len(self.cards)):
-            card =  self.cards[self.current]
+        while(self.number_learned < len(self.cards_array)):
+            card =  self.cards_array[self.current]
             if card["repetitions_number"] == 3: 
                 self.number_learned += 1
-                if self.number_learned == len(self.cards):
+                if self.number_learned == len(self.cards_array):
                     break
             else:
                 self.index_last_card = self.current
@@ -221,7 +229,7 @@ class Cards():
             
             self.current += 1
             # Обнуляем значения, если дошли до конца карточек
-            if self.current == len(self.cards):
+            if self.current == len(self.cards_array):
                 self.current = 0
                 self.number_learned = 0
         
@@ -229,11 +237,11 @@ class Cards():
         return "Learned everything"
     
     def change_last_card(self):
-        current_repetitions_number = self.cards[self.index_last_card]["repetitions_number"]
-        self.cards[self.index_last_card]["repetitions_number"] = int(current_repetitions_number) + 1
+        current_repetitions_number = self.cards_array[self.index_last_card]["repetitions_number"]
+        self.cards_array[self.index_last_card]["repetitions_number"] = int(current_repetitions_number) + 1
     
     def get_last_card(self):
-        return self.cards[self.index_last_card]
+        return self.cards_array[self.index_last_card]
         
 current_text = hint_text = remember_text = ""
 cards : Cards
@@ -258,12 +266,19 @@ def get_new_cards(message):
     show_next_card(message, keyboard)
 
 
+
 def show_next_card(message, keyboard):
-    global hint_text, remember_text, current_text, cards
+    global hint_text, remember_text, current_text, cards, connection
     card = next(cards)
     if card == "Learned everything":
         hide_keyboard = types.ReplyKeyboardRemove()
-        bot.send_message(message.chat.id, "Отлично! Вы запомнили все карточки, следующее повторение будет завтра в 20:00. Не опаздывайте!", reply_markup=hide_keyboard)
+        bot.send_message(message.chat.id, f"Отлично! Вы запомнили все карточки, следующее повторение будет завтра в f{STUDY_TIME}. Не опаздывайте!", reply_markup=hide_keyboard)
+        # Заносим выученные карточки в базу данных
+        for card in cards.cards_array:
+            db.change_card(connection, card["card_id"], "memlevel", 1)
+            nextstudy = get_tomorrow_date()
+            db.change_card(connection, card["card_id"], "nextstudy", nextstudy)
+
         return
     
     hint_text = card["hint"]
@@ -291,7 +306,7 @@ def check_answer(message, keyboard, message_for_ban):
         return
     
     card = cards.get_last_card()
-    text = f"id: {card['card_id']}\n---------------------------\n{card['hint']}\n---------------------------\n{card['text']}\n---------------------------\nСколько раз осталось повторить: {3 - int(card["repetitions_number"])}"
+    text = f"id: {card['card_id']}\n---------------------------\n{card['hint']}\n---------------------------\n{card['text']}\n---------------------------\nОсталось повторить {3 - int(card["repetitions_number"])} раз"
     bot.edit_message_text(chat_id=message_for_ban.chat.id, message_id=message_for_ban.message_id, text=text)
     # Переходим к следующей карточке
     show_next_card(message, keyboard)
