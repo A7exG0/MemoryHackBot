@@ -111,7 +111,7 @@ def select_by_value(connection, column, value):
     if column != "card_id": # подготавливаем значение, только если поиск не в card_id колонке, так как там значения int
         value = correct_value(value)
     
-    query = f"SELECT card_id, text, hint FROM cards WHERE {column} = {value}"
+    query = f"SELECT card_id, text, hint, memlevel FROM cards WHERE {column} = {value}"
     result = exec_select_query(connection, query)
     if result:
         return result[0]

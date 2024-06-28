@@ -17,11 +17,14 @@ connection = object
 
 from datetime import datetime, timedelta
 
-def get_tomorrow_date():
+def get_date_in_x_days(x : int):
+    '''
+    Функция получает дату через x дней. 
+    '''
     today = datetime.now()
-    tomorrow = today + timedelta(days=1)
+    nextdate = today + timedelta(days=x)
     # Возвращаем завтрашнюю дату в формате YYYY-MM-DD hh:mm
-    return tomorrow.strftime("%Y-%m-%d") + " " + STUDY_TIME
+    return nextdate.strftime("%Y-%m-%d") + " " + STUDY_TIME
 
 
 def show_card(message, card):
@@ -118,8 +121,10 @@ def delete_card(message):
 def show_all(message):
     global connection
     print('Получаем карточки из базы данных')
-    bot.send_message(message.chat.id, "Выводим все карточки")
     cards = db.select_all_cards(connection)
+    if not cards: 
+        bot.send_message(message.chat.id, "Карточек нет")
+        return
     if cards is False:
         bot.send_message(message.chat.id, "Произошла ошибка")
         return
@@ -191,22 +196,35 @@ def find_card(message, column):
         print("Карточка найдена")
 
 
+class Card():
+    def __init__(self, card, repetitions_number):
+        self.card_id = card[0]
+        self.text = card[1]
+        self.hint = card[2]
+        self.memlevel = int(card[3])
+        self.repetitions_number = repetitions_number
+        self.nextstudy = None
+    
+    def get_info(self):
+        text = f"id: {self.card_id}\n---------------------------\n{self.hint}\n---------------------------\n{self.text}\n---------------------------\n"
+        if self.repetitions_number == 0:
+            return text + "Отлично! Карточка в памяти"
+        else:
+            return text + f"Осталось повторить {self.repetitions_number} раз"
+        
+    def reduce_memlevel(self):
+        if self.memlevel > 0: 
+            self.memlevel -= 1
+
 class Cards(): 
-    def __init__(self, cards):
+    def __init__(self):
         self.cards_array = []
-        for card in cards:
-            self.add_card(card)
         self.current = 0 # Отображает номер текущей карты 
         self.number_learned = 0 # Фиксирует количество выученных карточке
         self.index_last_card = 0 # Будет указывать на последнюю полученную карту 
 
-    def add_card(self, card):
-        card = {
-            "card_id": card[0],
-            "text": card[1],
-            "hint": card[2],
-            "repetitions_number": "0"
-        }
+    def add_card(self, card, repetitions_number=1):
+        card = Card(card, repetitions_number)
         self.cards_array.append(card)
 
     def __next__(self):
@@ -217,8 +235,8 @@ class Cards():
 
         # Цикл пропуска выученных карточек
         while(self.number_learned < len(self.cards_array)):
-            card =  self.cards_array[self.current]
-            if card["repetitions_number"] == 3: 
+            card = self.cards_array[self.current]
+            if card.repetitions_number == 0: 
                 self.number_learned += 1
                 if self.number_learned == len(self.cards_array):
                     break
@@ -236,12 +254,20 @@ class Cards():
         # Если все карточки выучены, то возвратим это
         return "Learned everything"
     
-    def change_last_card(self):
-        current_repetitions_number = self.cards_array[self.index_last_card]["repetitions_number"]
-        self.cards_array[self.index_last_card]["repetitions_number"] = int(current_repetitions_number) + 1
+    def reduce_card_repetition(self):
+        self.cards_array[self.index_last_card].repetitions_number -= 1
     
+    def reduce_card_memlevel(self):
+        self.cards_array[self.index_last_card].reduce_memlevel()
+
     def get_last_card(self):
         return self.cards_array[self.index_last_card]
+    
+    def exists(self):
+        '''
+        Метод проверяет, есть ли вообще карточки.
+        '''
+        return self.cards_array
         
 current_text = hint_text = remember_text = ""
 cards : Cards
@@ -250,6 +276,32 @@ cards : Cards
 @bot.message_handler(commands=['learn'])
 def get_new_cards(message):
     global connection, cards
+    print("Начинаем обучение")
+    
+    cards = Cards()
+
+    # Выбираем все новые карточки 
+    cards_to_study = db.select_where_condition(connection, "memlevel = 0")
+
+    if cards_to_study:
+        for card in cards_to_study:
+            cards.add_card(card, repetitions_number=3) # Новые карточки повторить нужно будет три раза
+    
+    # Выбираем все карточки, которые созрели для повторения
+    today_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cards_to_repetition = db.select_where_condition(connection, f"memlevel > 0 and '{today_date}' > nextstudy")
+
+    if cards_to_repetition:
+        for card in cards_to_repetition:
+            cards.add_card(card, repetitions_number=1) # карточки для повторения нужно повторить только один раз 
+
+    if not cards.exists(): 
+        bot.send_message(message.chat.id, text = "Нет карточек для обучения")
+        print("Нет карточек для обучения")
+        return
+
+    bot.send_message(message.chat.id, text = "Погнали")
+    print("Карточки успешно получены")
 
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -257,32 +309,35 @@ def get_new_cards(message):
     button2 = types.KeyboardButton('Помню')
     keyboard.add(button1, button2)
 
-    bot.send_message(message.chat.id, text = "Сейчас вам будет показана карточка. Ваша задача вспомнить текст карточки по подсказке и ответить получилось ли у вас это или нет.",  reply_markup=keyboard)   
+    bot.send_message(message.chat.id, text = "Вам будет показана карточка. Ваша задача вспомнить текст карточки по подсказке и ответить получилось ли у вас это или нет.", reply_markup=keyboard)   
 
-    # Выбираем все новые карточки 
-    cards_to_study = db.select_where_condition(connection, "memlevel = 0")
-    cards = Cards(cards_to_study)
-    
     show_next_card(message, keyboard)
 
-
+def get_nextstudy_date(memlevel: int):
+    '''
+    Функция определяет следующую дату для повторения исходя из значения memlevel. 
+    Интервал между повторениями это 2^(memlevel - 1) дней.
+    Пример:
+    1-ое повторение будет на следующий день. 2-ое - послезавтра. 3-ое - через 4 дня и т.д.
+    '''
+    return 2 ** (memlevel - 1)
 
 def show_next_card(message, keyboard):
     global hint_text, remember_text, current_text, cards, connection
     card = next(cards)
+
     if card == "Learned everything":
         hide_keyboard = types.ReplyKeyboardRemove()
-        bot.send_message(message.chat.id, f"Отлично! Вы запомнили все карточки, следующее повторение будет завтра в f{STUDY_TIME}. Не опаздывайте!", reply_markup=hide_keyboard)
+        bot.send_message(message.chat.id, f"Отлично! Вы запомнили все карточки, следующее повторение будет завтра в {STUDY_TIME}. Не опаздывайте!", reply_markup=hide_keyboard)
+        
         # Заносим выученные карточки в базу данных
         for card in cards.cards_array:
-            db.change_card(connection, card["card_id"], "memlevel", 1)
-            nextstudy = get_tomorrow_date()
-            db.change_card(connection, card["card_id"], "nextstudy", nextstudy)
-
+            nextstudy = get_nextstudy_date(card.memlevel)
+            db.change_card(connection, card.card_id, "memlevel, nextstudy", f"{card.memlevel + 1}, {nextstudy}") # увеличиваем уровень запоминания карточки
         return
     
-    hint_text = card["hint"]
-    current_text = remember_text = card["text"]
+    hint_text = card.hint
+    current_text = remember_text = card.text
 
      # Отправляем сообщение с InlineKeyboardMarkup
     markup = types.InlineKeyboardMarkup()
@@ -297,8 +352,9 @@ def check_answer(message, keyboard, message_for_ban):
 
     answer = message.text
     if answer == "Помню":
-        cards.change_last_card() # увеличиеваем repetitions_number
+        cards.reduce_card_repetition() # увеличиеваем repetitions_number
     elif answer == "Не помню":
+        cards.reduce_card_memlevel() # уменьшаем значение memlevel для лучшего запоминания
         bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:")
     else:
         bot.send_message(message.chat.id, "Есть только два варианта. Попробуйте еще раз", reply_markup=keyboard)
@@ -306,13 +362,12 @@ def check_answer(message, keyboard, message_for_ban):
         return
     
     card = cards.get_last_card()
-    text = f"id: {card['card_id']}\n---------------------------\n{card['hint']}\n---------------------------\n{card['text']}\n---------------------------\nОсталось повторить {3 - int(card["repetitions_number"])} раз"
+    text = card.get_info()
     bot.edit_message_text(chat_id=message_for_ban.chat.id, message_id=message_for_ban.message_id, text=text)
     # Переходим к следующей карточке
     show_next_card(message, keyboard)
 
-
-# Обработчик нажатия на кнопку
+# Обработчик нажатия на кнопку "Перевернуть карточку"
 @bot.callback_query_handler(func=lambda call: call.data == "change_text")
 def callback_change_text(call):
     global current_text, hint_text, remember_text, cards
@@ -332,7 +387,7 @@ def callback_change_text(call):
     bot.answer_callback_query(call.id)  # Отвечаем на callback без отправки сообщения
     print("Карточка перевернута")
 
-# Добавление новой карточки
+# Обработчик команды /newcard
 @bot.message_handler(commands=['newcard'])
 def add_new_card(message):
     bot.send_message(message.chat.id, "Введите информацию, которую хотите запомнить")
