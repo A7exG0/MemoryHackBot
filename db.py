@@ -103,7 +103,7 @@ def sql_insert(connection, table, **kwargs):
 
         
 def select_all_cards(connection): 
-    query = "SELECT card_id, text, hint, memlevel FROM cards"
+    query = "SELECT card_id, text, hint, memlevel, nextstudy FROM cards"
     return exec_select_query(connection, query)
 
         
@@ -111,7 +111,7 @@ def select_by_value(connection, column, value):
     if column != "card_id": # подготавливаем значение, только если поиск не в card_id колонке, так как там значения int
         value = correct_value(value)
     
-    query = f"SELECT card_id, text, hint, memlevel FROM cards WHERE {column} = {value}"
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {column} = {value}"
     result = exec_select_query(connection, query)
     if result:
         return result[0]
@@ -120,7 +120,7 @@ def select_by_value(connection, column, value):
     
 def select_where_condition(connection, condition): 
     
-    query = f"SELECT card_id, text, hint, memlevel FROM cards WHERE {condition}"
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {condition}"
     result = exec_select_query(connection, query)
     if result:
         return result

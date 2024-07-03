@@ -4,6 +4,7 @@ from telebot import types
 import db 
 
 STUDY_TIME = "20:00"
+line_str = "---------------------------------------------"
 
 import configparser
 config = configparser.ConfigParser()
@@ -27,8 +28,12 @@ def get_date_in_x_days(x : int):
     return nextdate.strftime("%Y-%m-%d") + " " + STUDY_TIME
 
 
-def show_card(message, card):
-    bot.send_message(message.chat.id, f"id: {card[0]}\n---------------------------\n{card[2]}\n---------------------------\n{card[1]}")
+def show_card(message, card, show_date = False):
+    # print(card)
+    if show_date: 
+        bot.send_message(message.chat.id, f"id: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}\n{line_str}\nСледующее повторение: {card[4]}")
+    else:
+        bot.send_message(message.chat.id, f"sid: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}")
 
 # Команда /home
 @bot.message_handler(commands=['home'])
@@ -130,7 +135,7 @@ def show_all(message):
         return
     print("Карточки успешно получены")
     for card in cards: 
-        show_card(message, card)        
+        show_card(message, card, show_date=True)        
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
@@ -192,7 +197,7 @@ def find_card(message, column):
         bot.send_message(message.chat.id, "Такой карточки нет")
         print(f"Карточка со значение \"{message.text}\" в колонке {column} не найдена")
     else:
-        show_card(message, card)
+        show_card(message, card, show_date=True)
         print("Карточка найдена")
 
 
