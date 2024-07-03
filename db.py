@@ -103,7 +103,7 @@ def sql_insert(connection, table, **kwargs):
 
         
 def select_all_cards(connection): 
-    query = "SELECT card_id, text, hint FROM cards"
+    query = "SELECT card_id, text, hint, memlevel FROM cards"
     return exec_select_query(connection, query)
 
         
@@ -120,7 +120,7 @@ def select_by_value(connection, column, value):
     
 def select_where_condition(connection, condition): 
     
-    query = f"SELECT card_id, text, hint FROM cards WHERE {condition}"
+    query = f"SELECT card_id, text, hint, memlevel FROM cards WHERE {condition}"
     result = exec_select_query(connection, query)
     if result:
         return result
@@ -132,6 +132,6 @@ def delete_card(connection, id):
     return exec_commit_query(connection, query) 
 
 def change_card(connection, id, column, value):
-    query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id}"
+    query = f"UPDATE cards SET {column} = {value} WHERE card_id = {id}"
     return exec_commit_query(connection, query)
     

@@ -313,7 +313,7 @@ def get_new_cards(message):
 
     show_next_card(message, keyboard)
 
-def get_nextstudy_date(memlevel: int):
+def get_nextstudy_days(memlevel: int):
     '''
     Функция определяет следующую дату для повторения исходя из значения memlevel. 
     Интервал между повторениями это 2^(memlevel - 1) дней.
@@ -332,8 +332,10 @@ def show_next_card(message, keyboard):
         
         # Заносим выученные карточки в базу данных
         for card in cards.cards_array:
-            nextstudy = get_nextstudy_date(card.memlevel)
-            db.change_card(connection, card.card_id, "memlevel, nextstudy", f"{card.memlevel + 1}, {nextstudy}") # увеличиваем уровень запоминания карточки
+            nextstudy_days = get_nextstudy_days(card.memlevel)
+            nextstudy = get_date_in_x_days(nextstudy_days)
+            db.change_card(connection, card.card_id, "memlevel", f"{card.memlevel + 1}") # увеличиваем уровень запоминания карточки
+            db.change_card(connection, card.card_id, "nextstudy", f"'{nextstudy}'") 
         return
     
     hint_text = card.hint
