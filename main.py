@@ -409,15 +409,13 @@ def check_answer(message, keyboard, message_for_ban):
         return
     
     answer = message.text
-    if answer == "Помню":
+    card = cards.get_last_card()
+    if answer == "Помню" or answer == card.text:
+        bot.send_message(message.chat.id, text = "Отлично! Следующая карточка:", reply_markup=keyboard)
         cards.reduce_card_repetition() # увеличиеваем repetitions_number
-    elif answer == "Не помню":
-        cards.reduce_card_memlevel() # уменьшаем значение memlevel для лучшего запоминания
-        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:")
     else:
-        bot.send_message(message.chat.id, "Есть только два варианта. Попробуйте еще раз", reply_markup=keyboard)
-        bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard, message_for_ban))
-        return
+        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:", reply_markup=keyboard)
+        cards.reduce_card_memlevel() # уменьшаем значение memlevel для лучшего запоминания
     
     card = cards.get_last_card()
     text = card.get_info()
@@ -489,14 +487,12 @@ def check_answ(message, keyboard, message_for_ban):
         return
     
     answer = message.text
-    if answer == "Помню":
+    card = cards.get_last_card()
+    if answer == "Помню" or answer == card.text:
+        bot.send_message(message.chat.id, text = "Отлично! Следующая карточка:", reply_markup=keyboard)
         cards.reduce_card_repetition()
-    elif answer == "Не помню":
-        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:")
     else:
-        bot.send_message(message.chat.id, "Есть только два варианта. Попробуйте еще раз", reply_markup=keyboard)
-        bot.register_next_step_handler(message, lambda msg: check_answ(msg, keyboard, message_for_ban))
-        return
+        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:", reply_markup=keyboard)
     
     card = cards.get_last_card()
     text = card.get_info()
