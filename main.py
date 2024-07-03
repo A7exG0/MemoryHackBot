@@ -5,6 +5,7 @@ import db
 
 STUDY_TIME = "20:00"
 line_str = "---------------------------------------------"
+main_info = "Если хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /find"
 
 import configparser
 config = configparser.ConfigParser()
@@ -28,17 +29,38 @@ def get_date_in_x_days(x : int):
     return nextdate.strftime("%Y-%m-%d") + " " + STUDY_TIME
 
 
+def get_nextstudy_days(memlevel: int):
+    '''
+    Функция определяет следующую дату для повторения исходя из значения memlevel. 
+    Интервал между повторениями это 2^(memlevel - 1) дней.
+    Пример:
+    1-ое повторение будет на следующий день. 2-ое - послезавтра. 3-ое - через 4 дня и т.д.
+    '''
+    return 2 ** (memlevel - 1)
+
+
 def show_card(message, card, show_date = False):
     # print(card)
     if show_date: 
         bot.send_message(message.chat.id, f"id: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}\n{line_str}\nСледующее повторение: {card[4]}")
     else:
-        bot.send_message(message.chat.id, f"sid: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}")
+        bot.send_message(message.chat.id, f"id: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}")
 
-# Команда /home
-@bot.message_handler(commands=['home'])
-def send_home(message):
-    bot.send_message(message.chat.id, "Вы на главной странице.")
+
+# @bot.message_handler(commands=['cancel'])
+# def send_home(message):
+#     print("Вызвана команда /cancel")
+#     bot.send_message(message.chat.id, "Выполнение команды прервано")
+
+# Команда /cancel
+def check_cancel(message):
+    if message.text == "/cancel":
+        print("Вызвана команда /cancel")
+        bot.send_message(message.chat.id, main_info)
+        return True
+    else: 
+        return False
+
 
 # Команда /change
 @bot.message_handler(commands=['change'])
@@ -47,6 +69,9 @@ def ask_id_for_change(message):
     bot.register_next_step_handler(message, get_card_to_change)
 
 def get_card_to_change(message):
+    if check_cancel(message):
+        return
+    
     print("Получаем карточку")
     id = message.text
     card = db.select_by_value(connection, "card_id", id)
@@ -102,6 +127,9 @@ def ask_id_for_delete(message):
     bot.register_next_step_handler(message, delete_card)
 
 def delete_card(message):
+    if check_cancel(message):
+        return
+
     print("Начинаем удалять карточку")
     id = message.text
     is_unique = db.value_unique(connection, "cards", "card_id", id)
@@ -144,7 +172,7 @@ def udentify_user(message):
 
     connection = db.connect_database()
     user_id = message.chat.id
-    bot.send_message(message.chat.id, "Доброго времени суток.\nЕсли хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /find")
+    bot.send_message(message.chat.id, f"Доброго времени суток.\n{main_info}")
 
     is_unique = db.value_unique(connection, "users", "user_id", user_id)
     if is_unique is True: 
@@ -170,6 +198,9 @@ def choose_parameter(message):
     bot.register_next_step_handler(message, lambda msg: check_find_param(msg, keyboard))
 
 def check_find_param(message, keyboard):
+    if check_cancel(message):
+        return
+    print("Проверяем параметр поиска")
     param = message.text
     column = ""
     if param == "id":
@@ -190,7 +221,10 @@ def check_find_param(message, keyboard):
     bot.send_message(message.chat.id, "Введите значение для поиска", reply_markup=hide_keyboard)
     bot.register_next_step_handler(message, lambda msg: find_card(msg, column))
 
-def find_card(message, column):
+def find_card(message, column):    
+    if check_cancel(message):
+        return
+        
     print("Начинаем поиск в базе данных")
     card = db.select_by_value(connection, column, message.text)
     if not card:
@@ -211,7 +245,7 @@ class Card():
         self.nextstudy = None
     
     def get_info(self):
-        text = f"id: {self.card_id}\n---------------------------\n{self.hint}\n---------------------------\n{self.text}\n---------------------------\n"
+        text = f"id: {self.card_id}\n{line_str}\n{self.hint}\n{line_str}\n{self.text}\n{line_str}\n"
         if self.repetitions_number == 0:
             return text + "Отлично! Карточка в памяти"
         else:
@@ -318,15 +352,6 @@ def get_new_cards(message):
 
     show_next_card(message, keyboard)
 
-def get_nextstudy_days(memlevel: int):
-    '''
-    Функция определяет следующую дату для повторения исходя из значения memlevel. 
-    Интервал между повторениями это 2^(memlevel - 1) дней.
-    Пример:
-    1-ое повторение будет на следующий день. 2-ое - послезавтра. 3-ое - через 4 дня и т.д.
-    '''
-    return 2 ** (memlevel - 1)
-
 def show_next_card(message, keyboard):
     global hint_text, remember_text, current_text, cards, connection
     card = next(cards)
@@ -356,7 +381,9 @@ def show_next_card(message, keyboard):
 
 def check_answer(message, keyboard, message_for_ban):
     global cards, current_text
-
+    if check_cancel(message):
+        return
+    
     answer = message.text
     if answer == "Помню":
         cards.reduce_card_repetition() # увеличиеваем repetitions_number
@@ -373,6 +400,81 @@ def check_answer(message, keyboard, message_for_ban):
     bot.edit_message_text(chat_id=message_for_ban.chat.id, message_id=message_for_ban.message_id, text=text)
     # Переходим к следующей карточке
     show_next_card(message, keyboard)
+
+# Обработчик команды /learnall. Команда проходится по всем карточкам, не изменяя их memlevel и nextstudy
+@bot.message_handler(commands=['learnall'])
+def get_cards(message):
+    global connection, cards
+    print("Начинаем учить все подряд")
+    
+    cards = Cards()
+
+    # Выбираем все карточки
+    cards_to_study = db.select_where_condition(connection, "0 <= memlevel")
+
+    if cards_to_study:
+        for card in cards_to_study:
+            cards.add_card(card, repetitions_number=1) # карточки для повторения нужно повторить только один раз 
+
+    if not cards.exists(): 
+        bot.send_message(message.chat.id, text = "Нет карточек для обучения")
+        print("Нет карточек для обучения")
+        return
+
+    bot.send_message(message.chat.id, text = "Погнали")
+    print("Карточки успешно получены")
+
+    # Отправляем сообщение с ReplyKeyboardMarkup
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    button1 = types.KeyboardButton('Не помню')
+    button2 = types.KeyboardButton('Помню')
+    keyboard.add(button1, button2)
+
+    bot.send_message(message.chat.id, text = "Вам будет показана карточка. Ваша задача вспомнить текст карточки по подсказке и ответить получилось ли у вас это или нет.", reply_markup=keyboard)   
+
+    repeat_next_card(message, keyboard)
+
+
+def repeat_next_card(message, keyboard):
+    global hint_text, remember_text, current_text, cards, connection
+    card = next(cards)
+
+    if card == "Learned everything":
+        hide_keyboard = types.ReplyKeyboardRemove()
+        bot.send_message(message.chat.id, f"Отлично! Вы прошлись по всем карточкам!", reply_markup=hide_keyboard)
+        return
+    
+    hint_text = card.hint
+    current_text = remember_text = card.text
+
+    # Отправляем сообщение с InlineKeyboardMarkup
+    markup = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
+    markup.add(button)
+    message_for_ban = bot.send_message(message.chat.id, text = hint_text, reply_markup=markup)
+
+    bot.register_next_step_handler(message, lambda msg: check_answ(msg, keyboard, message_for_ban))
+
+def check_answ(message, keyboard, message_for_ban):
+    global cards, current_text
+    if check_cancel(message):
+        return
+    
+    answer = message.text
+    if answer == "Помню":
+        cards.reduce_card_repetition()
+    elif answer == "Не помню":
+        bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:")
+    else:
+        bot.send_message(message.chat.id, "Есть только два варианта. Попробуйте еще раз", reply_markup=keyboard)
+        bot.register_next_step_handler(message, lambda msg: check_answ(msg, keyboard, message_for_ban))
+        return
+    
+    card = cards.get_last_card()
+    text = card.get_info()
+    bot.edit_message_text(chat_id=message_for_ban.chat.id, message_id=message_for_ban.message_id, text=text)
+    # Переходим к следующей карточке
+    repeat_next_card(message, keyboard)
 
 # Обработчик нажатия на кнопку "Перевернуть карточку"
 @bot.callback_query_handler(func=lambda call: call.data == "change_text")
@@ -403,8 +505,10 @@ def add_new_card(message):
 # Спрашиваем про текст карточки
 def get_remember_text(message):
     global connection 
+    if check_cancel(message):
+        return
+    
     text = message.text
-
     is_unique = db.value_unique(connection, "cards", "text", text)
     if is_unique == -1:         
         bot.send_message(message.chat.id, "Произошла ошибка(")
@@ -420,7 +524,9 @@ def get_remember_text(message):
 # Спрашиваем про подсказку для карточки 
 def get_hint(message, text):
     global connection
-
+    if check_cancel(message):
+        return
+    
     if not db.value_unique(connection, "cards", "hint", message.text):
         bot.send_message(message.chat.id, "Карточка с такой подсказкой уже есть, попробуйте другую")
         bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
