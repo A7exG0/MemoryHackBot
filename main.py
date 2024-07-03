@@ -15,7 +15,8 @@ token = config['token']['value']
 
 bot = telebot.TeleBot(token)
 
-connection = object
+connection = None
+connection_flag = False
 
 from datetime import datetime, timedelta
 
@@ -65,6 +66,11 @@ def check_cancel(message):
 # Команда /change
 @bot.message_handler(commands=['change'])
 def ask_id_for_change(message):    
+    global connection
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
+    
     bot.send_message(message.chat.id, "Введите id карточки")
     bot.register_next_step_handler(message, get_card_to_change)
 
@@ -123,6 +129,11 @@ def change_card(message, column, id):
 # Команда /delete
 @bot.message_handler(commands=['delete'])
 def ask_id_for_delete(message):    
+    global connection
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return
+    
     bot.send_message(message.chat.id, "Введите id карточки")
     bot.register_next_step_handler(message, delete_card)
 
@@ -153,6 +164,10 @@ def delete_card(message):
 @bot.message_handler(commands=['showall'])
 def show_all(message):
     global connection
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
+
     print('Получаем карточки из базы данных')
     cards = db.select_all_cards(connection)
     if not cards: 
@@ -168,7 +183,7 @@ def show_all(message):
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def udentify_user(message):
-    global connection 
+    global connection
 
     connection = db.connect_database()
     user_id = message.chat.id
@@ -183,10 +198,16 @@ def udentify_user(message):
         print("Знакомый пользователь")
     else: 
         bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
+        return
     
 # Обработчик команды /find
 @bot.message_handler(commands=['find'])
 def choose_parameter(message):
+    global connection
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
+    
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     button1 = types.KeyboardButton('id')
@@ -315,8 +336,11 @@ cards : Cards
 @bot.message_handler(commands=['learn'])
 def get_new_cards(message):
     global connection, cards
-    print("Начинаем обучение")
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
     
+    print("Начинаем обучение")
     cards = Cards()
 
     # Выбираем все новые карточки 
@@ -404,9 +428,13 @@ def check_answer(message, keyboard, message_for_ban):
 # Обработчик команды /learnall. Команда проходится по всем карточкам, не изменяя их memlevel и nextstudy
 @bot.message_handler(commands=['learnall'])
 def get_cards(message):
-    global connection, cards
-    print("Начинаем учить все подряд")
+    global connection, cards  
+
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
     
+    print("Начинаем учить все подряд")
     cards = Cards()
 
     # Выбираем все карточки
@@ -498,7 +526,12 @@ def callback_change_text(call):
 
 # Обработчик команды /newcard
 @bot.message_handler(commands=['newcard'])
-def add_new_card(message):
+def add_new_card(message):    
+    global connection
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
+    
     bot.send_message(message.chat.id, "Введите информацию, которую хотите запомнить")
     bot.register_next_step_handler(message, get_remember_text)
 
