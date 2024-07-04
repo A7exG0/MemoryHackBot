@@ -1,28 +1,127 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from telebot import types
 import db 
+from datetime import datetime, timedelta
+import configparser
 
 STUDY_TIME = "20:00"
 line_str = "---------------------------------------------"
 main_info = "Если хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /find"
 
-import configparser
+# Получаем токен бота из файла config.ini
 config = configparser.ConfigParser()
 config.read('config.ini')
-
 token = config['token']['value']
 
 bot = telebot.TeleBot(token)
-
 connection = None
-connection_flag = False
 
-from datetime import datetime, timedelta
+class Card():
+    '''
+    Класс для удобной работы с параметрами карточки.
+    '''
+    def __init__(self, card, repetitions_number):
+        self.card_id = card[0]
+        self.text = card[1]
+        self.hint = card[2]
+        self.memlevel = int(card[3])
+        self.repetitions_number = repetitions_number
+        self.nextstudy = None
+    
+    def get_info(self):
+        '''
+        Возвращает информацию о карточке.
+        '''
+        text = f"id: {self.card_id}\n{line_str}\n{self.hint}\n{line_str}\n{self.text}\n{line_str}\n"
+        if self.repetitions_number == 0:
+            return text + "Супер! Карточка в памяти"
+        else:
+            return text + f"Осталось повторить {self.repetitions_number} раз"
+        
+    def reduce_memlevel(self):
+        '''
+        Уменьшает значение memelevel.
+        '''
+        if self.memlevel > 0: 
+            self.memlevel -= 1
+
+class Cards(): 
+    '''
+    Класс-итераратор для удобной работы с набором карточек. 
+    '''
+    def __init__(self):
+        self.cards_array = []    # Массив всех карточек
+        self.current = 0         # Отображает номер текущей карты 
+        self.number_learned = 0  # Фиксирует количество выученных карточке
+        self.index_last_card = 0 # Будет указывать на последнюю полученную карту 
+
+    def add_card(self, card, repetitions_number=1):
+        '''
+        Добовляет карточку в основной массив 
+        '''
+        card = Card(card, repetitions_number)
+        self.cards_array.append(card)
+
+    def __next__(self):
+        '''
+        Получение следующей карточки
+        '''
+        # Если дашли до конца колоды, то обнуляем счетчики
+        if self.current == len(self.cards_array):
+            self.current = 0
+            self.number_learned = 0
+
+        # Цикл пропуска выученных карточек
+        while(self.number_learned < len(self.cards_array)):
+            card = self.cards_array[self.current]
+            if card.repetitions_number == 0: # если повторять карточку не нужно, значит ее мы выучили
+                self.number_learned += 1
+                if self.number_learned == len(self.cards_array): # если выучили все карточки - выходим из цикла
+                    break
+            else:
+                self.index_last_card = self.current
+                self.current += 1
+                return card
+            
+            self.current += 1
+            # Обнуляем значения, если дошли до конца карточек
+            if self.current == len(self.cards_array):
+                self.current = 0
+                self.number_learned = 0
+        
+        # Если все карточки выучены, то возвратим это
+        return "Learned everything"
+    
+    def reduce_card_repetition(self):
+        '''
+        Уменьшает количество повторений.
+        '''
+        self.cards_array[self.index_last_card].repetitions_number -= 1
+    
+    def reduce_card_memlevel(self):
+        '''
+        Уменьшает memlevel карточки
+        '''
+        self.cards_array[self.index_last_card].reduce_memlevel()
+
+    def get_last_card(self):
+        '''
+        Получаем последнюю полученную карточку.
+        '''
+        return self.cards_array[self.index_last_card]
+    
+    def exists(self):
+        '''
+        Метод проверяет, есть ли вообще карточки.
+        '''
+        return self.cards_array
+        
+current_text = hint_text = remember_text = ""
+cards : Cards
 
 def get_date_in_x_days(x : int):
     '''
-    Функция получает дату через x дней. 
+    Функция получает x и возвращает дату через x дней. 
     '''
     today = datetime.now()
     nextdate = today + timedelta(days=x)
@@ -41,20 +140,19 @@ def get_nextstudy_days(memlevel: int):
 
 
 def show_card(message, card, show_date = False):
-    # print(card)
+    '''
+    Функция отображает информацию карточки. Флаг show_date определяет будет ли отображена дата следующего обучения.
+    '''
     if show_date: 
         bot.send_message(message.chat.id, f"id: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}\n{line_str}\nСледующее повторение: {card[4]}")
     else:
         bot.send_message(message.chat.id, f"id: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}")
 
-
-# @bot.message_handler(commands=['cancel'])
-# def send_home(message):
-#     print("Вызвана команда /cancel")
-#     bot.send_message(message.chat.id, "Выполнение команды прервано")
-
 # Команда /cancel
 def check_cancel(message):
+    '''
+    Функция проверяет, ввел ли пользователь комманду /cancel
+    '''
     if message.text == "/cancel":
         print("Вызвана команда /cancel")
         bot.send_message(message.chat.id, main_info)
@@ -66,6 +164,10 @@ def check_cancel(message):
 # Команда /change
 @bot.message_handler(commands=['change'])
 def ask_id_for_change(message):    
+    '''
+    1 функция команды /change.
+    Ввод id карточки для изменения
+    '''
     global connection
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -75,6 +177,10 @@ def ask_id_for_change(message):
     bot.register_next_step_handler(message, get_card_to_change)
 
 def get_card_to_change(message):
+    '''
+    2 функция команды /change.
+    Находит карточку по id.
+    '''
     if check_cancel(message):
         return
     
@@ -90,6 +196,10 @@ def get_card_to_change(message):
         choose_column_to_change(message, id)
 
 def choose_column_to_change(message, id):
+    '''
+    3 функция команды /change.
+    Выбор параметра для изменения.
+    '''
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     button1 = types.KeyboardButton('Подсказка')
     button2 = types.KeyboardButton('Текст')
@@ -99,6 +209,13 @@ def choose_column_to_change(message, id):
     bot.register_next_step_handler(message, lambda msg: check_column(msg, keyboard, id))
 
 def check_column(message, keyboard, id):
+    '''
+    4 функция команды /change. 
+    Проверка корректности выбора параметра изменения.
+    '''
+    if check_cancel(message):
+        return
+    
     column = message.text
     if column == "Подсказка":
         print("Выбрано изменение по подсказке")
@@ -116,6 +233,10 @@ def check_column(message, keyboard, id):
     bot.register_next_step_handler(message, lambda msg: change_card(msg, column, id))
 
 def change_card(message, column, id):
+    '''
+    5 функция команды /change. 
+    Изменение карточки.
+    '''
     if db.change_card(connection, id, column, message.text):
         print("Изменение прошло успешно")
         bot.send_message(message.chat.id, "Карточка изменена:")
@@ -129,6 +250,10 @@ def change_card(message, column, id):
 # Команда /delete
 @bot.message_handler(commands=['delete'])
 def ask_id_for_delete(message):    
+    '''
+    1 функция команды /delete.
+    Ввод id карточки для удаления.
+    '''
     global connection
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -138,6 +263,10 @@ def ask_id_for_delete(message):
     bot.register_next_step_handler(message, delete_card)
 
 def delete_card(message):
+    '''
+    2 функция команды /delete.
+    Удаляет карточку.
+    '''
     if check_cancel(message):
         return
 
@@ -163,6 +292,9 @@ def delete_card(message):
 # Команда /showall для отображения всех карточек
 @bot.message_handler(commands=['showall'])
 def show_all(message):
+    '''
+    Получает все карточки из базы данных и выводит их.
+    '''
     global connection
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -183,6 +315,9 @@ def show_all(message):
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def udentify_user(message):
+    '''
+    Подключается к базе данных по id пользователя и выводит основную информацию.
+    '''
     global connection
 
     connection = db.connect_database()
@@ -203,6 +338,10 @@ def udentify_user(message):
 # Обработчик команды /find
 @bot.message_handler(commands=['find'])
 def choose_parameter(message):
+    '''
+    1 функция команды /find. 
+    Выбора параметра для поиска
+    '''
     global connection
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -219,6 +358,11 @@ def choose_parameter(message):
     bot.register_next_step_handler(message, lambda msg: check_find_param(msg, keyboard))
 
 def check_find_param(message, keyboard):
+    '''
+    2 функция команды /find.
+    Проверка выбранного параметра поиска
+    '''
+
     if check_cancel(message):
         return
     print("Проверяем параметр поиска")
@@ -243,6 +387,10 @@ def check_find_param(message, keyboard):
     bot.register_next_step_handler(message, lambda msg: find_card(msg, column))
 
 def find_card(message, column):    
+    '''
+    3 функция команды /find.
+    Находит карточку по введеному значению.
+    '''
     if check_cancel(message):
         return
         
@@ -256,85 +404,13 @@ def find_card(message, column):
         print("Карточка найдена")
 
 
-class Card():
-    def __init__(self, card, repetitions_number):
-        self.card_id = card[0]
-        self.text = card[1]
-        self.hint = card[2]
-        self.memlevel = int(card[3])
-        self.repetitions_number = repetitions_number
-        self.nextstudy = None
-    
-    def get_info(self):
-        text = f"id: {self.card_id}\n{line_str}\n{self.hint}\n{line_str}\n{self.text}\n{line_str}\n"
-        if self.repetitions_number == 0:
-            return text + "Отлично! Карточка в памяти"
-        else:
-            return text + f"Осталось повторить {self.repetitions_number} раз"
-        
-    def reduce_memlevel(self):
-        if self.memlevel > 0: 
-            self.memlevel -= 1
-
-class Cards(): 
-    def __init__(self):
-        self.cards_array = []
-        self.current = 0 # Отображает номер текущей карты 
-        self.number_learned = 0 # Фиксирует количество выученных карточке
-        self.index_last_card = 0 # Будет указывать на последнюю полученную карту 
-
-    def add_card(self, card, repetitions_number=1):
-        card = Card(card, repetitions_number)
-        self.cards_array.append(card)
-
-    def __next__(self):
-        # Если дашли до конца колоды, то обнуляем счетчики
-        if self.current == len(self.cards_array):
-            self.current = 0
-            self.number_learned = 0
-
-        # Цикл пропуска выученных карточек
-        while(self.number_learned < len(self.cards_array)):
-            card = self.cards_array[self.current]
-            if card.repetitions_number == 0: 
-                self.number_learned += 1
-                if self.number_learned == len(self.cards_array):
-                    break
-            else:
-                self.index_last_card = self.current
-                self.current += 1
-                return card
-            
-            self.current += 1
-            # Обнуляем значения, если дошли до конца карточек
-            if self.current == len(self.cards_array):
-                self.current = 0
-                self.number_learned = 0
-        
-        # Если все карточки выучены, то возвратим это
-        return "Learned everything"
-    
-    def reduce_card_repetition(self):
-        self.cards_array[self.index_last_card].repetitions_number -= 1
-    
-    def reduce_card_memlevel(self):
-        self.cards_array[self.index_last_card].reduce_memlevel()
-
-    def get_last_card(self):
-        return self.cards_array[self.index_last_card]
-    
-    def exists(self):
-        '''
-        Метод проверяет, есть ли вообще карточки.
-        '''
-        return self.cards_array
-        
-current_text = hint_text = remember_text = ""
-cards : Cards
-
 # Обработчик команды /learn
 @bot.message_handler(commands=['learn'])
-def get_new_cards(message):
+def get_cards_for_learn(message):
+    '''
+    1 функция команды /learn.
+    Получает карточки, которые созрели для обучения 
+    '''
     global connection, cards
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -377,6 +453,10 @@ def get_new_cards(message):
     show_next_card(message, keyboard)
 
 def show_next_card(message, keyboard):
+    '''
+    2 функция команды /learn. 
+    Отображает следующую карточку для обучения
+    '''
     global hint_text, remember_text, current_text, cards, connection
     card = next(cards)
 
@@ -404,6 +484,10 @@ def show_next_card(message, keyboard):
     bot.register_next_step_handler(message, lambda msg: check_answer(msg, keyboard, message_for_ban))
 
 def check_answer(message, keyboard, message_for_ban):
+    '''
+    3 функция команды /learn.
+    Проверяет ответ пользователя.
+    '''
     global cards, current_text
     if check_cancel(message):
         return
@@ -425,7 +509,11 @@ def check_answer(message, keyboard, message_for_ban):
 
 # Обработчик команды /learnall. Команда проходится по всем карточкам, не изменяя их memlevel и nextstudy
 @bot.message_handler(commands=['learnall'])
-def get_cards(message):
+def get_cards_for_learnall(message):
+    '''
+    1 функция команды /learnall
+    Получает все подряд карточки
+    '''
     global connection, cards  
 
     if not connection:
@@ -462,6 +550,10 @@ def get_cards(message):
 
 
 def repeat_next_card(message, keyboard):
+    '''
+    2 функция команды /learnall.
+    Получает следующую карточку для повторения
+    '''
     global hint_text, remember_text, current_text, cards, connection
     card = next(cards)
 
@@ -482,6 +574,10 @@ def repeat_next_card(message, keyboard):
     bot.register_next_step_handler(message, lambda msg: check_answ(msg, keyboard, message_for_ban))
 
 def check_answ(message, keyboard, message_for_ban):
+    '''
+    3 функция команды /learnall 
+    Проверяет ответ пользователя
+    '''
     global cards, current_text
     if check_cancel(message):
         return
@@ -503,6 +599,9 @@ def check_answ(message, keyboard, message_for_ban):
 # Обработчик нажатия на кнопку "Перевернуть карточку"
 @bot.callback_query_handler(func=lambda call: call.data == "change_text")
 def callback_change_text(call):
+    '''
+    Функция для имитация переворачивания флешкарточки
+    '''
     global current_text, hint_text, remember_text, cards
     
     # Проверка на изменение текста перед обновлением
@@ -523,6 +622,10 @@ def callback_change_text(call):
 # Обработчик команды /newcard
 @bot.message_handler(commands=['newcard'])
 def add_new_card(message):    
+    '''
+    1 функция команды /newcard
+    Запрашивает информацию для новой карточки 
+    '''
     global connection
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -531,8 +634,11 @@ def add_new_card(message):
     bot.send_message(message.chat.id, "Введите информацию, которую хотите запомнить")
     bot.register_next_step_handler(message, get_remember_text)
 
-# Спрашиваем про текст карточки
 def get_remember_text(message):
+    '''
+    2 функция команды /newcard
+    Проверяет введенную информацию и запрашивает подсказку для карточки
+    '''
     global connection 
     if check_cancel(message):
         return
@@ -550,8 +656,11 @@ def get_remember_text(message):
     bot.send_message(message.chat.id, "Введите подсказку, по которой будете вспоминать")
     bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
 
-# Спрашиваем про подсказку для карточки 
 def get_hint(message, text):
+    '''
+    3 функция команды /newcard
+    Проверет введенную подсказку 
+    '''
     global connection
     if check_cancel(message):
         return
