@@ -1,6 +1,7 @@
 import mysql.connector 
 from mysql.connector import Error
 import configparser
+from bot_logging import logger
 
 def connect_database():
     config = configparser.ConfigParser()
@@ -22,11 +23,11 @@ def connect_database():
         )
 
         if connection.is_connected():
-            print("Успешное подключение к базе данных")
+            logger.info("Подключение к базе данных прошло успешно")
             return connection  # Возвращаем соединение
 
     except Error as e:
-        print(f"Ошибка подключения к MySQL: {e}")
+        logger.error(f"Ошибка подключения к MySQL: {e}")
         return None  # Возвращаем None в случае ошибки
 
 
@@ -38,7 +39,7 @@ def exec_select_query(connection, query):
             return result
 
         except Error as e:
-            print(f"Ошибка запроса SQL: {e}")
+            logger.error(f"Ошибка запроса SQL: {e}")
             return -1
         
 def exec_commit_query(connection, query):
@@ -49,7 +50,7 @@ def exec_commit_query(connection, query):
             return True
 
         except Error as e:
-            print(f"Ошибка запроса SQL: {e}")
+            logger.error(f"Ошибка запроса SQL: {e}")
             return -1
 
 def correct_value(value):

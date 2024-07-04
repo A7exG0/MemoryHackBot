@@ -2,3 +2,4 @@ env
 test.py
 config.ini
 __pycache__
+bot.log

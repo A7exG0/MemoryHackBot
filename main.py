@@ -3,6 +3,7 @@ from telebot import types
 import db 
 from datetime import datetime, timedelta
 import configparser
+from bot_logging import logger
 
 STUDY_TIME = "20:00"
 line_str = "---------------------------------------------"
@@ -154,7 +155,7 @@ def check_cancel(message):
     Функция проверяет, ввел ли пользователь комманду /cancel
     '''
     if message.text == "/cancel":
-        print("Вызвана команда /cancel")
+        logger.info("Вызвана команда /cancel")
         bot.send_message(message.chat.id, main_info)
         return True
     else: 
@@ -173,6 +174,7 @@ def ask_id_for_change(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
     
+    logger.info("Вызвана команда /change")
     bot.send_message(message.chat.id, "Введите id карточки")
     bot.register_next_step_handler(message, get_card_to_change)
 
@@ -184,11 +186,9 @@ def get_card_to_change(message):
     if check_cancel(message):
         return
     
-    print("Получаем карточку")
     id = message.text
     card = db.select_by_value(connection, "card_id", id)
     if not card: 
-        print(f"Карточки с {id} нет")
         bot.send_message(message.chat.id, "Карточки с таким id нет")
         return
     else:
@@ -218,10 +218,8 @@ def check_column(message, keyboard, id):
     
     column = message.text
     if column == "Подсказка":
-        print("Выбрано изменение по подсказке")
         column = "hint"
     elif column == "Текст":
-        print("Выбрано изменение по тексту")
         column = "text"
     else:
         bot.send_message(message.chat.id, "Есть два варианта. Попробуйте еще", reply_markup=keyboard)
@@ -238,12 +236,12 @@ def change_card(message, column, id):
     Изменение карточки.
     '''
     if db.change_card(connection, id, column, message.text):
-        print("Изменение прошло успешно")
+        logger.info("Команда /change отрабтала успешно")
         bot.send_message(message.chat.id, "Карточка изменена:")
         card = db.select_by_value(connection, "card_id", id)
         show_card(message, card)
     else:
-        print("Ошибка в функции change_card")
+        logger.error("В команде /change произошла ошибка")
         bot.send_message(message.chat.id, "Произошла ошибка при изменении карточки(")
 
         
@@ -259,6 +257,7 @@ def ask_id_for_delete(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return
     
+    logger.info("Вызвана команда /delete")
     bot.send_message(message.chat.id, "Введите id карточки")
     bot.register_next_step_handler(message, delete_card)
 
@@ -270,22 +269,20 @@ def delete_card(message):
     if check_cancel(message):
         return
 
-    print("Начинаем удалять карточку")
     id = message.text
     is_unique = db.value_unique(connection, "cards", "card_id", id)
     if is_unique: 
-        print(f"Карточки с {id} нет")
         bot.send_message(message.chat.id, "Карточки с таким id нет")
         return
     elif not is_unique:
         if db.delete_card(connection, id): 
-            print(f"Карточка удалена")
+            logger.info("Команда /delete отработала успешно")
             bot.send_message(message.chat.id, "Карточка удалена")
         else:
-            print(f"Произошла ошибка при удалении")
+            logger.error("В команде /delete произошла ошибка")
             bot.send_message(message.chat.id, "Произошла ошибка при удалении(")
     else:
-        print(f"Произошла ошибка при в функции value_unique")
+        logger.error("Произошла ошибка при в функции value_unique")
         bot.send_message(message.chat.id, "Произошла ошибка при удалении(")
             
 
@@ -300,15 +297,17 @@ def show_all(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
 
-    print('Получаем карточки из базы данных')
+    logger.info('Вызвана команда /showall')
     cards = db.select_all_cards(connection)
     if not cards: 
         bot.send_message(message.chat.id, "Карточек нет")
+        logger.info("Команда /showall отработала успешно")
         return
     if cards is False:
+        logger.error("В команде /showall произошла ошбика")
         bot.send_message(message.chat.id, "Произошла ошибка")
         return
-    print("Карточки успешно получены")
+    logger.info("Команда /showall отработала успешно")
     for card in cards: 
         show_card(message, card, show_date=True)        
 
@@ -321,19 +320,26 @@ def udentify_user(message):
     global connection
 
     connection = db.connect_database()
+    if not connection:
+        logger.error("Ошибка в подключении к базе данных")
+        return 
+    
+    logger.info("Вызвана команда /start")
+
     user_id = message.chat.id
     bot.send_message(message.chat.id, f"Доброго времени суток.\n{main_info}")
 
     is_unique = db.value_unique(connection, "users", "user_id", user_id)
     if is_unique is True: 
-        print("Новый пользователь")
+        logger.info("Новый пользователь добавлен в базу данных")
         if db.sql_insert(connection, "users", user_id=user_id) is False:
             bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
+            logger.error("Произошла ошибка в функции sql_insert")
     elif is_unique is False:
-        print("Знакомый пользователь")
+        logger.info("Пользователь существует")
     else: 
         bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
-        return
+        logger.error("Произошла ошибка в функции value_unique")
     
 # Обработчик команды /find
 @bot.message_handler(commands=['find'])
@@ -347,6 +353,7 @@ def choose_parameter(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
     
+    logger.info("Вызвана команда /find")
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     button1 = types.KeyboardButton('id')
@@ -365,17 +372,13 @@ def check_find_param(message, keyboard):
 
     if check_cancel(message):
         return
-    print("Проверяем параметр поиска")
     param = message.text
     column = ""
     if param == "id":
-        print("Выбран поиск по id")
         column = "card_id"
     elif param == "Подсказка":
-        print("Выбран поиск по подсказке")
         column = "hint"
     elif param == "Текст":
-        print("Выбран поиск по тексту")
         column = "text"
     else:
         bot.send_message(message.chat.id, "Есть только три варианта. Попробуйте еще", reply_markup=keyboard)
@@ -394,14 +397,13 @@ def find_card(message, column):
     if check_cancel(message):
         return
         
-    print("Начинаем поиск в базе данных")
     card = db.select_by_value(connection, column, message.text)
     if not card:
         bot.send_message(message.chat.id, "Такой карточки нет")
-        print(f"Карточка со значение \"{message.text}\" в колонке {column} не найдена")
     else:
         show_card(message, card, show_date=True)
-        print("Карточка найдена")
+    logger.info("Команда /find отработала успешно")
+
 
 
 # Обработчик команды /learn
@@ -416,7 +418,8 @@ def get_cards_for_learn(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
     
-    print("Начинаем обучение")
+    logger.info("Вызвана команда /learn")
+
     cards = Cards()
 
     # Выбираем все новые карточки 
@@ -436,11 +439,10 @@ def get_cards_for_learn(message):
 
     if not cards.exists(): 
         bot.send_message(message.chat.id, text = "Нет карточек для обучения")
-        print("Нет карточек для обучения")
+        logger.info("Команда /learn успешно отработала")
         return
 
     bot.send_message(message.chat.id, text = "Погнали")
-    print("Карточки успешно получены")
 
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -449,7 +451,6 @@ def get_cards_for_learn(message):
     keyboard.add(button1, button2)
 
     bot.send_message(message.chat.id, text = "Вам будет показана карточка. Ваша задача вспомнить текст карточки по подсказке и ответить получилось ли у вас это или нет.", reply_markup=keyboard)   
-
     show_next_card(message, keyboard)
 
 def show_next_card(message, keyboard):
@@ -470,6 +471,8 @@ def show_next_card(message, keyboard):
             nextstudy = get_date_in_x_days(nextstudy_days)
             db.change_card(connection, card.card_id, "memlevel", f"{card.memlevel + 1}") # увеличиваем уровень запоминания карточки
             db.change_card(connection, card.card_id, "nextstudy", f"'{nextstudy}'") 
+        
+        logger.info("Команда /learn успешно отработала")
         return
     
     hint_text = card.hint
@@ -520,7 +523,7 @@ def get_cards_for_learnall(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
     
-    print("Начинаем учить все подряд")
+    logger.info("Вызвана команда /learnall")
     cards = Cards()
 
     # Выбираем все карточки
@@ -532,11 +535,10 @@ def get_cards_for_learnall(message):
 
     if not cards.exists(): 
         bot.send_message(message.chat.id, text = "Нет карточек для обучения")
-        print("Нет карточек для обучения")
+        logger.info("Команда /learnall успешно отработала")
         return
 
     bot.send_message(message.chat.id, text = "Погнали")
-    print("Карточки успешно получены")
 
     # Отправляем сообщение с ReplyKeyboardMarkup
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -560,6 +562,7 @@ def repeat_next_card(message, keyboard):
     if card == "Learned everything":
         hide_keyboard = types.ReplyKeyboardRemove()
         bot.send_message(message.chat.id, f"Отлично! Вы прошлись по всем карточкам!", reply_markup=hide_keyboard)
+        logger.info("Команда /learnall успешно отработала")
         return
     
     hint_text = card.hint
@@ -603,7 +606,8 @@ def callback_change_text(call):
     Функция для имитация переворачивания флешкарточки
     '''
     global current_text, hint_text, remember_text, cards
-    
+    logger.info("Вызван обработчик кнопки для переворота карточки")
+
     # Проверка на изменение текста перед обновлением
     if call.message.text != current_text:
         markup = types.InlineKeyboardMarkup()
@@ -617,7 +621,8 @@ def callback_change_text(call):
         current_text = hint_text
 
     bot.answer_callback_query(call.id)  # Отвечаем на callback без отправки сообщения
-    print("Карточка перевернута")
+    logger.info("Обрабочик кнопки для перевортора карточки успешно отработал")
+
 
 # Обработчик команды /newcard
 @bot.message_handler(commands=['newcard'])
@@ -631,6 +636,7 @@ def add_new_card(message):
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
     
+    logger.info("Вызвана команда /newcard")
     bot.send_message(message.chat.id, "Введите информацию, которую хотите запомнить")
     bot.register_next_step_handler(message, get_remember_text)
 
@@ -672,10 +678,11 @@ def get_hint(message, text):
 
     if db.sql_insert(connection=connection, table="cards", text=text, hint=message.text, user_id=message.chat.id) is False: 
         bot.send_message(message.chat.id, "Произошла ошибка. Карточка не добавлена(")
-        print("Произошла ошибка при добавлении карточки")
+        logger.error("Произошла ошибка в фукнции sql_insert")
         return 
     
-    print("Карточка сделана и занесена в базу данных")
     bot.send_message(message.chat.id, "Карточка для запоминания успешно добавлена!")
+    logger.info("Команда /newcard успешно отработала")
+
 
 bot.polling(none_stop=True, interval=0)
