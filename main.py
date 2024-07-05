@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import configparser
 from bot_logging import logger
 
-STUDY_TIME = "20:00"
+STUDY_TIME = "00:00"
 line_str = "---------------------------------------------"
 main_info = "Если хотите начать учиться, введите команду /learn\nХотите добавить новую карточку, введите команду /newcard\nХотите увидеть все карточки, введите команду /showall\nХотите найти карточку, введите команду /find"
 
@@ -63,6 +63,9 @@ class Cards():
         card = Card(card, repetitions_number)
         self.cards_array.append(card)
 
+    def __len__(self):
+        return len(self.cards_array)
+
     def __next__(self):
         '''
         Получение следующей карточки
@@ -116,6 +119,13 @@ class Cards():
         Метод проверяет, есть ли вообще карточки.
         '''
         return self.cards_array
+    
+    def reduce_number_of_cards(self, new_number):
+        '''
+        Функция, которая будет сокращать количество карт для изучения, чтобы не пришлось за раз учить 100 карточек
+        '''
+        if len(self.cards_array) < new_number: 
+            self.cards_array = self.cards_array[:new_number]
         
 current_text = hint_text = remember_text = ""
 cards : Cards
@@ -149,6 +159,31 @@ def show_card(message, card, show_date = False):
     else:
         bot.send_message(message.chat.id, f"id: {card[0]}\nmemlevel: {card[3]}\n{line_str}\n{card[2]}\n{line_str}\n{card[1]}")
 
+def get_cards_from_db():
+    '''
+    Функция получения карточек из базы данных для изучения 
+    '''
+    cards = Cards()
+    # Выбираем все карточки, которые созрели для повторения
+    today_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cards_to_repetition = db.select_where_condition(connection, f"memlevel > 0 and '{today_date}' > nextstudy")
+
+    if cards_to_repetition:
+        for card in cards_to_repetition:
+            cards.add_card(card, repetitions_number=1) # карточки для повторения нужно повторить только один раз 
+
+    # Выбираем все новые карточки 
+    cards_to_study = db.select_where_condition(connection, "memlevel = 0")
+
+    if cards_to_study:
+        for card in cards_to_study:
+            cards.add_card(card, repetitions_number=3) # Новые карточки повторить нужно будет три раза
+    
+    if not cards.exists(): 
+        return []
+    else:
+        return cards
+
 # Команда /cancel
 def check_cancel(message):
     '''
@@ -156,7 +191,7 @@ def check_cancel(message):
     '''
     if message.text == "/cancel":
         logger.info("Вызвана команда /cancel")
-        bot.send_message(message.chat.id, main_info)
+        bot.send_message(message.chat.id, "Вы на главном экране")
         return True
     else: 
         return False
@@ -327,7 +362,6 @@ def udentify_user(message):
     logger.info("Вызвана команда /start")
 
     user_id = message.chat.id
-    bot.send_message(message.chat.id, f"Доброго времени суток.\n{main_info}")
 
     is_unique = db.value_unique(connection, "users", "user_id", user_id)
     if is_unique is True: 
@@ -340,6 +374,10 @@ def udentify_user(message):
     else: 
         bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
         logger.error("Произошла ошибка в функции value_unique")
+        return
+    
+    cards = get_cards_from_db()
+    bot.send_message(message.chat.id, f"Доброго времени суток!\nНужно изучить {len(cards)} карточек")
     
 # Обработчик команды /find
 @bot.message_handler(commands=['find'])
@@ -405,7 +443,6 @@ def find_card(message, column):
     logger.info("Команда /find отработала успешно")
 
 
-
 # Обработчик команды /learn
 @bot.message_handler(commands=['learn'])
 def get_cards_for_learn(message):
@@ -420,27 +457,14 @@ def get_cards_for_learn(message):
     
     logger.info("Вызвана команда /learn")
 
-    cards = Cards()
-
-    # Выбираем все новые карточки 
-    cards_to_study = db.select_where_condition(connection, "memlevel = 0")
-
-    if cards_to_study:
-        for card in cards_to_study:
-            cards.add_card(card, repetitions_number=3) # Новые карточки повторить нужно будет три раза
+    cards = get_cards_from_db()
     
-    # Выбираем все карточки, которые созрели для повторения
-    today_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cards_to_repetition = db.select_where_condition(connection, f"memlevel > 0 and '{today_date}' > nextstudy")
-
-    if cards_to_repetition:
-        for card in cards_to_repetition:
-            cards.add_card(card, repetitions_number=1) # карточки для повторения нужно повторить только один раз 
-
-    if not cards.exists(): 
+    if not cards: 
         bot.send_message(message.chat.id, text = "Нет карточек для обучения")
         logger.info("Команда /learn успешно отработала")
         return
+
+    cards.reduce_number_of_cards(10)
 
     bot.send_message(message.chat.id, text = "Погнали")
 
@@ -462,15 +486,20 @@ def show_next_card(message, keyboard):
     card = next(cards)
 
     if card == "Learned everything":
-        hide_keyboard = types.ReplyKeyboardRemove()
-        bot.send_message(message.chat.id, f"Отлично! Вы запомнили все карточки, следующее повторение будет завтра в {STUDY_TIME}. Не опаздывайте!", reply_markup=hide_keyboard)
-        
         # Заносим выученные карточки в базу данных
         for card in cards.cards_array:
             nextstudy_days = get_nextstudy_days(card.memlevel)
             nextstudy = get_date_in_x_days(nextstudy_days)
             db.change_card(connection, card.card_id, "memlevel", f"{card.memlevel + 1}") # увеличиваем уровень запоминания карточки
             db.change_card(connection, card.card_id, "nextstudy", f"'{nextstudy}'") 
+
+        cards = get_cards_from_db()
+        hide_keyboard = types.ReplyKeyboardRemove()
+        cards_number = len(cards)
+        if cards_number == 0:
+            bot.send_message(message.chat.id, f"Вы изучили все карточки", reply_markup=hide_keyboard)
+        else: 
+            bot.send_message(message.chat.id, f"Осталось изучить {cards_number} карточек\nЧтобы продолжить введите команду /learn", reply_markup=hide_keyboard)
         
         logger.info("Команда /learn успешно отработала")
         return
@@ -498,7 +527,7 @@ def check_answer(message, keyboard, message_for_ban):
     answer = message.text
     card = cards.get_last_card()
     if answer == "Помню" or answer == card.text:
-        bot.send_message(message.chat.id, text = "Отлично! Следующая карточка:", reply_markup=keyboard)
+        bot.send_message(message.chat.id, text = "Отлично!", reply_markup=keyboard)
         cards.reduce_card_repetition() # увеличиеваем repetitions_number
     else:
         bot.send_message(message.chat.id, "Запомните карточку получше. Мы к ней еще вернемся. Следующая карточка:", reply_markup=keyboard)
@@ -685,4 +714,14 @@ def get_hint(message, text):
     logger.info("Команда /newcard успешно отработала")
 
 
-bot.polling(none_stop=True, interval=0)
+from requests.exceptions import ReadTimeout
+
+while True:
+    try:
+        # Устанавливаем большое значение тайм-аута
+        bot.polling(none_stop=True, interval=0, timeout=600)
+    except ReadTimeout:
+        print("ReadTimeout occurred. Retrying...")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        break
