@@ -16,6 +16,7 @@ token = config['token']['value']
 
 bot = telebot.TeleBot(token)
 connection = None
+group = "DEFAULT"
 
 class Card():
     '''
@@ -130,6 +131,8 @@ class Cards():
 current_text = hint_text = remember_text = ""
 cards : Cards
 
+
+
 def get_date_in_x_days(x : int):
     '''
     Функция получает x и возвращает дату через x дней. 
@@ -163,22 +166,23 @@ def get_cards_from_db():
     '''
     Функция получения карточек из базы данных для изучения 
     '''
+    global group
     cards = Cards()
     # Выбираем все карточки, которые созрели для повторения
     today_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cards_to_repetition = db.select_where_condition(connection, f"memlevel > 0 and '{today_date}' > nextstudy")
-
+    cards_to_repetition = db.select_where_condition(connection, f"memlevel > 0 and '{today_date}' > nextstudy and `group` = '{group}'")
+   
     if cards_to_repetition:
         for card in cards_to_repetition:
             cards.add_card(card, repetitions_number=1) # карточки для повторения нужно повторить только один раз 
 
     # Выбираем все новые карточки 
-    cards_to_study = db.select_where_condition(connection, "memlevel = 0")
+    cards_to_study = db.select_where_condition(connection, f"memlevel = 0 and `group` = '{group}'")
 
     if cards_to_study:
         for card in cards_to_study:
             cards.add_card(card, repetitions_number=3) # Новые карточки повторить нужно будет три раза
-    
+
     if not cards.exists(): 
         return []
     else:
@@ -195,6 +199,54 @@ def check_cancel(message):
         return True
     else: 
         return False
+
+
+# Команда /changegroup
+@bot.message_handler(commands=['changegroup'])
+def change_group(message):    
+    '''
+    1 функция команды /changegroup
+    '''
+    global connection
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
+    
+    logger.info("Вызвана команда /changegroup")
+    bot.send_message(message.chat.id, "Введите название группы")
+    bot.register_next_step_handler(message, get_group_name)
+
+def get_group_name(message):
+    '''
+    2 функция команды /changegroup.
+    '''
+    global group
+
+    if check_cancel(message):
+        return
+    
+    group = message.text
+    bot.send_message(message.chat.id, f"Группа изменена на {group}")
+    logger.info("Команда /changegroup отработала успешно")
+
+# Команда /groups
+@bot.message_handler(commands=['groups'])
+def show_all_groups(message):
+    global connection, group
+    if not connection:
+        bot.send_message(message.chat.id, "Сначала введите команду /start")
+        return 
+    
+    logger.info("Вызвана команда /groups")
+
+    groups = db.select_all_groups(connection)
+    str_message = ''
+    for index in groups: 
+        str_message += index[0] + "\n"
+    
+    str_message += f"Текущая группа: {group}"
+    bot.send_message(message.chat.id, str_message)
+    logger.info("Команда /groups успешно отработала")
 
 
 # Команда /change
@@ -218,11 +270,12 @@ def get_card_to_change(message):
     2 функция команды /change.
     Находит карточку по id.
     '''
+    global group
     if check_cancel(message):
         return
     
     id = message.text
-    card = db.select_by_value(connection, "card_id", id)
+    card = db.select_by_value(connection, "card_id", id, group)
     if not card: 
         bot.send_message(message.chat.id, "Карточки с таким id нет")
         return
@@ -270,10 +323,11 @@ def change_card(message, column, id):
     5 функция команды /change. 
     Изменение карточки.
     '''
-    if db.change_card(connection, id, column, message.text):
+    global group
+    if db.change_card(connection, id, column, message.text, group):
         logger.info("Команда /change отрабтала успешно")
         bot.send_message(message.chat.id, "Карточка изменена:")
-        card = db.select_by_value(connection, "card_id", id)
+        card = db.select_by_value(connection, "card_id", id, group)
         show_card(message, card)
     else:
         logger.error("В команде /change произошла ошибка")
@@ -301,6 +355,7 @@ def delete_card(message):
     2 функция команды /delete.
     Удаляет карточку.
     '''
+    global group
     if check_cancel(message):
         return
 
@@ -310,7 +365,7 @@ def delete_card(message):
         bot.send_message(message.chat.id, "Карточки с таким id нет")
         return
     elif not is_unique:
-        if db.delete_card(connection, id): 
+        if db.delete_card(connection, id, group): 
             logger.info("Команда /delete отработала успешно")
             bot.send_message(message.chat.id, "Карточка удалена")
         else:
@@ -327,13 +382,13 @@ def show_all(message):
     '''
     Получает все карточки из базы данных и выводит их.
     '''
-    global connection
+    global connection, group
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
 
     logger.info('Вызвана команда /showall')
-    cards = db.select_all_cards(connection)
+    cards = db.select_all_cards(connection, group)
     if not cards: 
         bot.send_message(message.chat.id, "Карточек нет")
         logger.info("Команда /showall отработала успешно")
@@ -432,10 +487,11 @@ def find_card(message, column):
     3 функция команды /find.
     Находит карточку по введеному значению.
     '''
+    global group
     if check_cancel(message):
         return
         
-    card = db.select_by_value(connection, column, message.text)
+    card = db.select_by_value(connection, column, message.text, group)
     if not card:
         bot.send_message(message.chat.id, "Такой карточки нет")
     else:
@@ -482,7 +538,7 @@ def show_next_card(message, keyboard):
     2 функция команды /learn. 
     Отображает следующую карточку для обучения
     '''
-    global hint_text, remember_text, current_text, cards, connection
+    global hint_text, remember_text, current_text, cards, connection, group
     card = next(cards)
 
     if card == "Learned everything":
@@ -490,8 +546,8 @@ def show_next_card(message, keyboard):
         for card in cards.cards_array:
             nextstudy_days = get_nextstudy_days(card.memlevel)
             nextstudy = get_date_in_x_days(nextstudy_days)
-            db.change_card(connection, card.card_id, "memlevel", f"{card.memlevel + 1}") # увеличиваем уровень запоминания карточки
-            db.change_card(connection, card.card_id, "nextstudy", f"'{nextstudy}'") 
+            db.change_card(connection, card.card_id, "memlevel", f"{card.memlevel + 1}", group) # увеличиваем уровень запоминания карточки
+            db.change_card(connection, card.card_id, "nextstudy", f"'{nextstudy}'", group) 
 
         cards = get_cards_from_db()
         hide_keyboard = types.ReplyKeyboardRemove()
@@ -546,7 +602,7 @@ def get_cards_for_learnall(message):
     1 функция команды /learnall
     Получает все подряд карточки
     '''
-    global connection, cards  
+    global connection, cards, group 
 
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
@@ -556,7 +612,7 @@ def get_cards_for_learnall(message):
     cards = Cards()
 
     # Выбираем все карточки
-    cards_to_study = db.select_where_condition(connection, "0 <= memlevel")
+    cards_to_study = db.select_where_condition(connection, f"0 <= memlevel and `group` = '{group}'")
 
     if cards_to_study:
         for card in cards_to_study:
@@ -590,7 +646,7 @@ def repeat_next_card(message, keyboard):
 
     if card == "Learned everything":
         hide_keyboard = types.ReplyKeyboardRemove()
-        bot.send_message(message.chat.id, f"Отлично! Вы прошлись по всем карточкам!", reply_markup=hide_keyboard)
+        bot.send_message(message.chat.id, f"Вы прошлись по всем карточкам!", reply_markup=hide_keyboard)
         logger.info("Команда /learnall успешно отработала")
         return
     
@@ -696,7 +752,7 @@ def get_hint(message, text):
     3 функция команды /newcard
     Проверет введенную подсказку 
     '''
-    global connection
+    global connection, group
     if check_cancel(message):
         return
     
@@ -705,7 +761,7 @@ def get_hint(message, text):
         bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
         return
 
-    if db.sql_insert(connection=connection, table="cards", text=text, hint=message.text, user_id=message.chat.id) is False: 
+    if db.sql_insert(connection=connection, table="cards", group=group, text=text, hint=message.text, user_id=message.chat.id) is False: 
         bot.send_message(message.chat.id, "Произошла ошибка. Карточка не добавлена(")
         logger.error("Произошла ошибка в фукнции sql_insert")
         return 

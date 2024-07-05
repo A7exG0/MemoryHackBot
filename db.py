@@ -80,7 +80,7 @@ def value_unique(connection, table, column, value):
         return not result
 
  
-def sql_insert(connection, table, **kwargs):
+def sql_insert(connection, table, group=None, **kwargs):
     '''
     Функция принимает connection базы данных и таблицу в которую будут вставляться данные. 
     Далее параметры будут по названию будут записываться в соответствующий столбец. 
@@ -93,26 +93,30 @@ def sql_insert(connection, table, **kwargs):
         columns += key + ","
         sql_value = correct_value(value)
         values+= sql_value + ","
-            
+
     # Удаляем последнюю запятую 
     values = values[:len(values)-1]
     columns = columns[:len(columns)-1]
 
+    if group:
+        columns += ", `group`"
+        values += f", '{group}'"
     query = f"INSERT Memory_bot.{table}({columns}) VALUES({values})"
+    print(query)
 
     return exec_commit_query(connection, query)
 
         
-def select_all_cards(connection): 
-    query = "SELECT card_id, text, hint, memlevel, nextstudy FROM cards"
+def select_all_cards(connection, group): 
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE `group` = '{group}'"
     return exec_select_query(connection, query)
 
         
-def select_by_value(connection, column, value): 
+def select_by_value(connection, column, value, group): 
     if column != "card_id": # подготавливаем значение, только если поиск не в card_id колонке, так как там значения int
         value = correct_value(value)
     
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {column} = {value}"
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {column} = {value} and `group` = '{group}'"
     result = exec_select_query(connection, query)
     if result:
         return result[0]
@@ -128,11 +132,14 @@ def select_where_condition(connection, condition):
     else:
         return None
     
-def delete_card(connection, id):
-    query = f"DELETE FROM cards WHERE card_id = {id}"
+def delete_card(connection, id, group):
+    query = f"DELETE FROM cards WHERE card_id = {id} and `group` = '{group}'"
     return exec_commit_query(connection, query) 
 
-def change_card(connection, id, column, value):
-    query = f"UPDATE cards SET {column} = {value} WHERE card_id = {id}"
+def change_card(connection, id, column, value, group):
+    query = f"UPDATE cards SET {column} = {value} WHERE card_id = {id} and `group` = '{group}'"
     return exec_commit_query(connection, query)
     
+def select_all_groups(connection):
+    query = f"SELECT DISTINCT `group` FROM cards"
+    return exec_select_query(connection, query)
