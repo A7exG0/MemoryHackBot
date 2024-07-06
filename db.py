@@ -136,7 +136,7 @@ def delete_card(connection, id, group):
     return exec_commit_query(connection, query) 
 
 def change_card(connection, id, column, value, group):
-    query = f"UPDATE cards SET {column} = {value} WHERE card_id = {id} and `group` = '{group}'"
+    query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id} and `group` = '{group}'"
     return exec_commit_query(connection, query)
     
 def select_all_groups(connection):

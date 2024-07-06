@@ -125,7 +125,7 @@ class Cards():
         '''
         Функция, которая будет сокращать количество карт для изучения, чтобы не пришлось за раз учить 100 карточек
         '''
-        if len(self.cards_array) < new_number: 
+        if len(self.cards_array) > new_number: 
             self.cards_array = self.cards_array[:new_number]
         
 current_text = hint_text = remember_text = ""
@@ -150,7 +150,7 @@ def get_nextstudy_days(memlevel: int):
     Пример:
     1-ое повторение будет на следующий день. 2-ое - послезавтра. 3-ое - через 4 дня и т.д.
     '''
-    return 2 ** (memlevel - 1)
+    return 2 ** memlevel
 
 
 def show_card(message, card, show_date = False):
