@@ -102,7 +102,6 @@ def sql_insert(connection, table, group=None, **kwargs):
         columns += ", `group`"
         values += f", '{group}'"
     query = f"INSERT Memory_bot.{table}({columns}) VALUES({values})"
-    print(query)
 
     return exec_commit_query(connection, query)
 

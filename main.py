@@ -375,6 +375,7 @@ def delete_card(message):
         logger.error("Произошла ошибка при в функции value_unique")
         bot.send_message(message.chat.id, "Произошла ошибка при удалении(")
             
+cancel_flag = False
 
 # Команда /showall для отображения всех карточек
 @bot.message_handler(commands=['showall'])
@@ -382,7 +383,7 @@ def show_all(message):
     '''
     Получает все карточки из базы данных и выводит их.
     '''
-    global connection, group
+    global connection, group, cancel_flag
     if not connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
@@ -399,7 +400,15 @@ def show_all(message):
         return
     logger.info("Команда /showall отработала успешно")
     for card in cards: 
-        show_card(message, card, show_date=True)        
+        show_card(message, card, show_date=True)     
+        if cancel_flag: 
+            cancel_flag = False
+            break
+
+@bot.message_handler(commands=['cancel'])
+def send_welcome(message):
+    global cancel_flag
+    cancel_flag = True
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
