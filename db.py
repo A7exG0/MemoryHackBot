@@ -2,6 +2,7 @@ import mysql.connector
 from mysql.connector import Error
 import configparser
 from bot_logging import logger
+import bb
 
 def connect_database():
     config = configparser.ConfigParser()
@@ -15,24 +16,24 @@ def connect_database():
 
     # Подключение к базе данных
     try:
-        connection = mysql.connector.connect(
+        bb.connection = mysql.connector.connect(
             host=host,
             database=database,
             user=user,
             password=password
         )
 
-        if connection.is_connected():
+        if bb.connection.is_connected():
             logger.info("Подключение к базе данных прошло успешно")
-            return connection  # Возвращаем соединение
+            return 1  # Возвращаем соединение
 
     except Error as e:
         logger.error(f"Ошибка подключения к MySQL: {e}")
         return None  # Возвращаем None в случае ошибки
 
 
-def exec_select_query(connection, query):
-    with connection.cursor() as cursor:
+def exec_select_query(query):
+    with bb.connection.cursor() as cursor:
         try: 
             cursor.execute(query)
             result = cursor.fetchall()
@@ -42,11 +43,11 @@ def exec_select_query(connection, query):
             logger.error(f"Ошибка запроса SQL: {e}")
             return -1
         
-def exec_commit_query(connection, query):
-    with connection.cursor() as cursor:
+def exec_commit_query(query):
+    with bb.connection.cursor() as cursor:
         try: 
             cursor.execute(query)
-            connection.commit()
+            bb.connection.commit()
             return True
 
         except Error as e:
@@ -63,7 +64,7 @@ def correct_value(value):
         value = str(value)
     return value
 
-def value_unique(connection, table, column, value):
+def value_unique(table, column, value):
     '''
     Проверяет уникальность value в column.
     Возвращает True, если такого значения нет.
@@ -73,19 +74,18 @@ def value_unique(connection, table, column, value):
 
     query = f"SELECT * FROM Memory_bot.{table} WHERE {column} = {sql_value}"
 
-    result = exec_select_query(connection, query)
+    result = exec_select_query(query)
     if result == -1:
         return result 
     else:
         return not result
 
  
-def sql_insert(connection, table, group=None, **kwargs):
+def sql_insert(table, **kwargs): 
     '''
-    Функция принимает connection базы данных и таблицу в которую будут вставляться данные. 
-    Далее параметры будут по названию будут записываться в соответствующий столбец. 
+    Параметры будут по названию будут записываться в соответствующий столбец. 
     Пример: 
-        sql_insert(connection, cards, id=12342)
+        sql_insert(cards, id=12342)
     В данном случае в столбец id запишеться соответствующее значение.
     '''
     columns = values = ""
@@ -98,47 +98,48 @@ def sql_insert(connection, table, group=None, **kwargs):
     values = values[:len(values)-1]
     columns = columns[:len(columns)-1]
 
-    if group:
-        columns += ", `group`"
-        values += f", '{group}'"
+    columns += ", `group`"
+    values += f", '{bb.group}'"
+    columns += ", `user_id`"
+    values += f", '{bb.user_id}'"
+
     query = f"INSERT Memory_bot.{table}({columns}) VALUES({values})"
-
-    return exec_commit_query(connection, query)
-
-        
-def select_all_cards(connection, group): 
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE `group` = '{group}'"
-    return exec_select_query(connection, query)
+    return exec_commit_query(query)
 
         
-def select_by_value(connection, column, value, group): 
+def select_all_cards(): 
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE `group` = '{bb.group}' and user_id = {bb.user_id}"
+    return exec_select_query(query)
+
+        
+def select_by_value(column, value): 
     if column != "card_id": # подготавливаем значение, только если поиск не в card_id колонке, так как там значения int
         value = correct_value(value)
     
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {column} = {value} and `group` = '{group}'"
-    result = exec_select_query(connection, query)
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {column} = {value} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    result = exec_select_query(query)
     if result:
         return result[0]
     else:
         return None
     
-def select_where_condition(connection, condition): 
+def select_where_condition(condition): 
     
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {condition}"
-    result = exec_select_query(connection, query)
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {condition} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    result = exec_select_query(query)
     if result:
         return result
     else:
         return None
     
-def delete_card(connection, id, group):
-    query = f"DELETE FROM cards WHERE card_id = {id} and `group` = '{group}'"
-    return exec_commit_query(connection, query) 
+def delete_card(id):
+    query = f"DELETE FROM cards WHERE card_id = {id} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    return exec_commit_query(query) 
 
-def change_card(connection, id, column, value, group):
-    query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id} and `group` = '{group}'"
-    return exec_commit_query(connection, query)
+def change_card(id, column, value):
+    query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    return exec_commit_query(query)
     
-def select_all_groups(connection):
-    query = f"SELECT DISTINCT `group` FROM cards"
-    return exec_select_query(connection, query)
+def select_all_groups():
+    query = f"SELECT DISTINCT `group` FROM cards WHERE user_id = {bb.user_id}"
+    return exec_select_query(query)
