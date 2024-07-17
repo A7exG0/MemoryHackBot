@@ -191,47 +191,79 @@ def check_cancel(message):
 
 # Команда /changegroup
 @bot.message_handler(commands=['changegroup'])
-def change_group(message):    
+def change_group(message):
     '''
     1 функция команды /changegroup
     '''
     if not bb.connection:
         bot.send_message(message.chat.id, "Сначала введите команду /start")
         return 
-    
     logger.info("Вызвана команда /changegroup")
-    bot.send_message(message.chat.id, "Введите название группы")
-    bot.register_next_step_handler(message, get_group_name)
+    
+    groups = db.select_all_groups()
 
-def get_group_name(message):
-    '''
-    2 функция команды /changegroup.
-    '''
+    # Создаем кнопки для выбора групп
+    markup = types.InlineKeyboardMarkup()
+
+    for card_group in groups: 
+        button = types.InlineKeyboardButton(text=card_group[0], callback_data=f"change_group:{card_group[0]}")
+        markup.add(button)
+    
+    button = types.InlineKeyboardButton(text="+ Добавить группу", callback_data=f"change_group:+")
+    markup.add(button)
+    bot.send_message(message.chat.id, text="Выберите группу:", reply_markup=markup)
+
+# Обработчик нажатия кнопки
+@bot.callback_query_handler(func=lambda call: call.data.startswith("change_group:"))
+def change_group_button(call):
+    group_name = call.data.split(":")[1]
+    if group_name == "+": 
+        bot.send_message(call.message.chat.id, "Введите название новой группы")
+        bot.register_next_step_handler(call.message, add_new_group)
+    else:
+        bb.group = group_name
+        bot.send_message(call.message.chat.id, f"Группа изменена на {bb.group}")
+        logger.info("Команда /changegroup отработала успешно")
+
+def add_new_group(message):
+
     if check_cancel(message):
         return
     
-    group = message.text
-    bot.send_message(message.chat.id, f"Группа изменена на {group}")
-    bb.group = group
+    bb.group = message.text
+    bot.send_message(message.chat.id, f"Группа изменена на {bb.group}")
     logger.info("Команда /changegroup отработала успешно")
 
-# Команда /groups
-@bot.message_handler(commands=['groups'])
-def show_all_groups(message):
-    if not bb.connection:
-        bot.send_message(message.chat.id, "Сначала введите команду /start")
-        return 
-    
-    logger.info("Вызвана команда /groups")
 
-    groups = db.select_all_groups()
-    str_message = ''
-    for index in groups: 
-        str_message += index[0] + "\n"
+# def get_group_name(message):
+#     '''
+#     2 функция команды /changegroup.
+#     '''
+#     if check_cancel(message):
+#         return
     
-    str_message += f"Текущая группа: {bb.group}"
-    bot.send_message(message.chat.id, str_message)
-    logger.info("Команда /groups успешно отработала")
+#     group = message.text
+#     bot.send_message(message.chat.id, f"Группа изменена на {group}")
+#     bb.group = group
+#     logger.info("Команда /changegroup отработала успешно")
+
+# # Команда /groups
+# @bot.message_handler(commands=['groups'])
+# def show_all_groups(message):
+#     if not bb.connection:
+#         bot.send_message(message.chat.id, "Сначала введите команду /start")
+#         return 
+    
+#     logger.info("Вызвана команда /groups")
+
+#     groups = db.select_all_groups()
+#     str_message = ''
+#     for index in groups: 
+#         str_message += index[0] + "\n"
+    
+#     str_message += f"Текущая группа: {bb.group}"
+#     bot.send_message(message.chat.id, str_message)
+#     logger.info("Команда /groups успешно отработала")
 
 
 # Команда /change
@@ -342,7 +374,7 @@ def delete_card(message):
 
     id = message.text
 
-    is_unique = db.value_unique("cards", "card_id", id)
+    is_unique = db.value_unique("cards", "card_id", id, group=bb.group)
     if is_unique: 
         bot.send_message(message.chat.id, "Карточки с таким id нет")
         return
@@ -406,6 +438,7 @@ def udentify_user(message):
 
     # Здесь берем id пользователя
     bb.user_id = message.chat.id
+    # bb.user_id = 100101
 
     is_unique = db.value_unique("users", "user_id", bb.user_id)
     if is_unique is True: 
@@ -551,7 +584,7 @@ def show_next_card(message, keyboard):
     hint_text = card.hint
     current_text = remember_text = card.text
 
-     # Отправляем сообщение с InlineKeyboardMarkup
+     # Отправляем сообщение с InlineKeyboardMarkup для кнопки "Перевернуть карточку"
     markup = types.InlineKeyboardMarkup()
     button = types.InlineKeyboardButton(text="Перевернуть карточку", callback_data="change_text")
     markup.add(button)
@@ -722,7 +755,7 @@ def get_remember_text(message):
         return
     
     text = message.text
-    is_unique = db.value_unique("cards", "text", text)
+    is_unique = db.value_unique("cards", "text", text, group=bb.group)
     if is_unique == -1:         
         bot.send_message(message.chat.id, "Произошла ошибка(")
         return
@@ -742,7 +775,7 @@ def get_hint(message, text):
     if check_cancel(message):
         return
     
-    if not db.value_unique("cards", "hint", message.text):
+    if not db.value_unique("cards", "hint", message.text, group=bb.group):
         bot.send_message(message.chat.id, "Карточка с такой подсказкой уже есть, попробуйте другую")
         bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
         return

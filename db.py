@@ -64,7 +64,7 @@ def correct_value(value):
         value = str(value)
     return value
 
-def value_unique(table, column, value):
+def value_unique(table, column, value, group = None):
     '''
     Проверяет уникальность value в column.
     Возвращает True, если такого значения нет.
@@ -73,7 +73,10 @@ def value_unique(table, column, value):
     sql_value = correct_value(value)
 
     query = f"SELECT * FROM Memory_bot.{table} WHERE {column} = {sql_value}"
-
+    
+    if group is not None:
+        query += f" and `group` = '{group}'"
+    print(query)
     result = exec_select_query(query)
     if result == -1:
         return result 
@@ -100,8 +103,6 @@ def sql_insert(table, **kwargs):
 
     columns += ", `group`"
     values += f", '{bb.group}'"
-    columns += ", `user_id`"
-    values += f", '{bb.user_id}'"
 
     query = f"INSERT Memory_bot.{table}({columns}) VALUES({values})"
     return exec_commit_query(query)
