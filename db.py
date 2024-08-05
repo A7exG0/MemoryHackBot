@@ -76,7 +76,6 @@ def value_unique(table, column, value, group = None):
     
     if group is not None:
         query += f" and `group` = '{group}'"
-    print(query)
     result = exec_select_query(query)
     if result == -1:
         return result 
@@ -84,7 +83,7 @@ def value_unique(table, column, value, group = None):
         return not result
 
  
-def sql_insert(table, **kwargs): 
+def sql_insert(table, group=None, **kwargs): 
     '''
     Параметры будут по названию будут записываться в соответствующий столбец. 
     Пример: 
@@ -100,11 +99,13 @@ def sql_insert(table, **kwargs):
     # Удаляем последнюю запятую 
     values = values[:len(values)-1]
     columns = columns[:len(columns)-1]
-
-    columns += ", `group`"
-    values += f", '{bb.group}'"
+    
+    if group is not None:
+        columns += ", `group`"
+        values += f", '{bb.group}'"
 
     query = f"INSERT Memory_bot.{table}({columns}) VALUES({values})"
+    print(query)
     return exec_commit_query(query)
 
         

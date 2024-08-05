@@ -183,7 +183,7 @@ def check_cancel(message):
     '''
     if message.text == "/cancel":
         logger.info("Вызвана команда /cancel")
-        bot.send_message(message.chat.id, "Вы на главном экране")
+        bot.send_message(message.chat.id, f"Вы на главном экране! Нужно изучить {len(cards)} карточек")
         return True
     else: 
         return False
@@ -454,7 +454,7 @@ def udentify_user(message):
         return
     
     cards = get_cards_from_db()
-    bot.send_message(message.chat.id, f"Доброго времени суток!\nНужно изучить {len(cards)} карточек")
+    bot.send_message(message.chat.id, f"Все работает!\nНужно изучить {len(cards)} карточек")
     
 # Обработчик команды /find
 @bot.message_handler(commands=['find'])
@@ -780,7 +780,7 @@ def get_hint(message, text):
         bot.register_next_step_handler(message, lambda msg: get_hint(msg, text))
         return
 
-    if db.sql_insert(table="cards", text=text, hint=message.text, user_id=message.chat.id) is False: 
+    if db.sql_insert(table="cards", text=text, hint=message.text, user_id=message.chat.id, group=bb.group) is False: 
         bot.send_message(message.chat.id, "Произошла ошибка. Карточка не добавлена(")
         logger.error("Произошла ошибка в фукнции sql_insert")
         return 
