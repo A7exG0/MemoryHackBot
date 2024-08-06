@@ -22,7 +22,7 @@ MemoryHackBot — это бот, предназначенный для запо�
 
 2. **Клонируйте репозиторий**
    ```bash
-   git clone https://github.com/yourusername/MemoryHackBot.git
+   git clone https://github.com/A7exG0/MemoryHackBot.git
    cd MemoryHackBot
    ```
 
