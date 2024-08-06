@@ -28,7 +28,8 @@ MemoryHackBot — это бот, предназначенный для запо�
 
 3. **Установите зависимости**
    ```bash
-   pip install -r requirements.txt
+   pip install telebot
+   pip install mysql-connector-python
    ```
 
 4. **Настройте базу данных**
@@ -38,8 +39,8 @@ MemoryHackBot — это бот, предназначенный для запо�
      ```
    - Создайте новую базу данных:
      ```sql
-     CREATE DATABASE memoryhackbot_db;
-     USE memoryhackbot_db;
+     CREATE DATABASE memory_bot;
+     USE memory_bot;
      ```
 
 5. **Создайте необходимые таблицы**
@@ -64,12 +65,14 @@ MemoryHackBot — это бот, предназначенный для запо�
 6. **Настройте подключение к базе данных**
    - Создайте файл `config.py` в корневом каталоге проекта с вашими данными для подключения к MySQL:
      ```python
-     DATABASE = {
-         'host': 'localhost',
-         'user': 'yourusername',
-         'password': 'yourpassword',
-         'database': 'memoryhackbot_db'
-     }
+     [database]
+     host = localhost
+     database = memory_bot
+     user = 'логин'
+     password = 'пароль'
+     
+     [token]
+     value = 'токен полученный с помощью BotFaster'
      ```
 
 7. **Запустите бота**
