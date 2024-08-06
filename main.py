@@ -441,9 +441,10 @@ def udentify_user(message):
     # bb.user_id = 100101
 
     is_unique = db.value_unique("users", "user_id", bb.user_id)
+    print(is_unique)
     if is_unique is True: 
         logger.info("Новый пользователь добавлен в базу данных")
-        if db.sql_insert("users") is False:
+        if db.sql_insert("users", user_id=bb.user_id) is False:
             bot.send_message(message.chat.id, "Произошла ошибка при знакомстве с пользователем(")
             logger.error("Произошла ошибка в функции sql_insert")
     elif is_unique is False:

@@ -110,7 +110,7 @@ def sql_insert(table, group=None, **kwargs):
 
         
 def select_all_cards(): 
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE `group` = '{bb.group}' and user_id = {bb.user_id}"
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM memory_bot.cards WHERE `group` = '{bb.group}' and user_id = {bb.user_id}"
     return exec_select_query(query)
 
         
@@ -118,7 +118,7 @@ def select_by_value(column, value):
     if column != "card_id": # подготавливаем значение, только если поиск не в card_id колонке, так как там значения int
         value = correct_value(value)
     
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {column} = {value} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM memory_bot.cards WHERE {column} = {value} and `group` = '{bb.group}' and user_id = {bb.user_id}"
     result = exec_select_query(query)
     if result:
         return result[0]
@@ -127,7 +127,7 @@ def select_by_value(column, value):
     
 def select_where_condition(condition): 
     
-    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM cards WHERE {condition} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    query = f"SELECT card_id, text, hint, memlevel, nextstudy FROM memory_bot.cards WHERE {condition} and `group` = '{bb.group}' and user_id = {bb.user_id}"
     result = exec_select_query(query)
     if result:
         return result
@@ -135,13 +135,13 @@ def select_where_condition(condition):
         return None
     
 def delete_card(id):
-    query = f"DELETE FROM cards WHERE card_id = {id} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    query = f"DELETE FROM memory_bot.cards WHERE card_id = {id} and `group` = '{bb.group}' and user_id = {bb.user_id}"
     return exec_commit_query(query) 
 
 def change_card(id, column, value):
-    query = f"UPDATE cards SET {column} = '{value}' WHERE card_id = {id} and `group` = '{bb.group}' and user_id = {bb.user_id}"
+    query = f"UPDATE memory_bot.cards SET {column} = '{value}' WHERE card_id = {id} and `group` = '{bb.group}' and user_id = {bb.user_id}"
     return exec_commit_query(query)
     
 def select_all_groups():
-    query = f"SELECT DISTINCT `group` FROM cards WHERE user_id = {bb.user_id}"
+    query = f"SELECT DISTINCT `group` FROM memory_bot.cards WHERE user_id = {bb.user_id}"
     return exec_select_query(query)
